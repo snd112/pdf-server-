@@ -1,6 +1,7 @@
 {
-  "name": "pdf-forge-max-pro",
+  "name": "pdforge-max-pro",
   "version": "1.0.0",
+  "description": "PDF Tools Server",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
