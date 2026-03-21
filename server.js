@@ -11,14 +11,14 @@ app.use(express.json());
 const upload = multer();
 
 // 🔐 API KEY
-const API_KEY = "a568hm8@gmail.com_odyW3q4nA6wA1XgMy6m5lMVDxZp39jaDDknjPVLQpN4dDDmN69yMk8HF7pIi5Rze";
+const API_KEY = "PUT_YOUR_API_KEY_HERE";
 
-// 🔥 Test
+// ✅ Test
 app.get("/", (req, res) => {
-  res.send("🔥 PDF API RUNNING 25 TOOLS");
+  res.send("🔥 PDF PRO MAX API WORKING");
 });
 
-// 🔥 Upload function
+// ================= UPLOAD =================
 async function uploadFile(file) {
   const form = new FormData();
   form.append("file", file.buffer, file.originalname);
@@ -30,18 +30,19 @@ async function uploadFile(file) {
   });
 
   const data = await res.json();
+  if (!data.url) throw new Error("Upload failed");
   return data.url;
 }
 
-// 🔥 helper
-async function process(url, endpoint) {
+// ================= PROCESS =================
+async function processFile(url, endpoint, extra = {}) {
   const res = await fetch(endpoint, {
     method: "POST",
     headers: {
       "x-api-key": API_KEY,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ url })
+    body: JSON.stringify({ url, ...extra })
   });
 
   return await res.json();
@@ -49,176 +50,194 @@ async function process(url, endpoint) {
 
 // ================= TOOLS =================
 
-// 1 PDF → JPG
+// 1
 app.post("/api/pdf-to-jpg", upload.single("file"), async (req, res) => {
-  const url = await uploadFile(req.file);
-  res.json(await process(url, "https://api.pdf.co/v1/pdf/convert/to/jpg"));
+  try {
+    const url = await uploadFile(req.file);
+    res.json(await processFile(url, "https://api.pdf.co/v1/pdf/convert/to/jpg"));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 2 JPG → PDF
+// 2
 app.post("/api/jpg-to-pdf", upload.single("file"), async (req, res) => {
-  const url = await uploadFile(req.file);
-  res.json(await process(url, "https://api.pdf.co/v1/pdf/convert/from/image"));
+  try {
+    const url = await uploadFile(req.file);
+    res.json(await processFile(url, "https://api.pdf.co/v1/pdf/convert/from/image"));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 3 PDF → Word
+// 3
 app.post("/api/pdf-to-word", upload.single("file"), async (req, res) => {
-  const url = await uploadFile(req.file);
-  res.json(await process(url, "https://api.pdf.co/v1/pdf/convert/to/doc"));
+  try {
+    const url = await uploadFile(req.file);
+    res.json(await processFile(url, "https://api.pdf.co/v1/pdf/convert/to/doc"));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 4 Word → PDF
+// 4
 app.post("/api/word-to-pdf", upload.single("file"), async (req, res) => {
-  const url = await uploadFile(req.file);
-  res.json(await process(url, "https://api.pdf.co/v1/pdf/convert/from/doc"));
+  try {
+    const url = await uploadFile(req.file);
+    res.json(await processFile(url, "https://api.pdf.co/v1/pdf/convert/from/doc"));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 5 PDF → Excel
+// 5
 app.post("/api/pdf-to-excel", upload.single("file"), async (req, res) => {
-  const url = await uploadFile(req.file);
-  res.json(await process(url, "https://api.pdf.co/v1/pdf/convert/to/xls"));
+  try {
+    const url = await uploadFile(req.file);
+    res.json(await processFile(url, "https://api.pdf.co/v1/pdf/convert/to/xls"));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 6 Excel → PDF
+// 6
 app.post("/api/excel-to-pdf", upload.single("file"), async (req, res) => {
-  const url = await uploadFile(req.file);
-  res.json(await process(url, "https://api.pdf.co/v1/pdf/convert/from/xls"));
+  try {
+    const url = await uploadFile(req.file);
+    res.json(await processFile(url, "https://api.pdf.co/v1/pdf/convert/from/xls"));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 7 PDF → PPT
+// 7
 app.post("/api/pdf-to-ppt", upload.single("file"), async (req, res) => {
-  const url = await uploadFile(req.file);
-  res.json(await process(url, "https://api.pdf.co/v1/pdf/convert/to/ppt"));
+  try {
+    const url = await uploadFile(req.file);
+    res.json(await processFile(url, "https://api.pdf.co/v1/pdf/convert/to/ppt"));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 8 PPT → PDF
+// 8
 app.post("/api/ppt-to-pdf", upload.single("file"), async (req, res) => {
-  const url = await uploadFile(req.file);
-  res.json(await process(url, "https://api.pdf.co/v1/pdf/convert/from/ppt"));
+  try {
+    const url = await uploadFile(req.file);
+    res.json(await processFile(url, "https://api.pdf.co/v1/pdf/convert/from/ppt"));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // 9 Merge
 app.post("/api/merge-pdf", upload.single("file"), async (req, res) => {
-  const url = await uploadFile(req.file);
-  res.json(await process(url, "https://api.pdf.co/v1/pdf/merge2"));
+  try {
+    const url = await uploadFile(req.file);
+    res.json(await processFile(url, "https://api.pdf.co/v1/pdf/merge2"));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // 10 Split
 app.post("/api/split-pdf", upload.single("file"), async (req, res) => {
-  const url = await uploadFile(req.file);
-  res.json(await process(url, "https://api.pdf.co/v1/pdf/split"));
+  try {
+    const url = await uploadFile(req.file);
+    res.json(await processFile(url, "https://api.pdf.co/v1/pdf/split"));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // 11 Compress
 app.post("/api/compress-pdf", upload.single("file"), async (req, res) => {
-  const url = await uploadFile(req.file);
-  res.json(await process(url, "https://api.pdf.co/v1/pdf/optimize"));
+  try {
+    const url = await uploadFile(req.file);
+    res.json(await processFile(url, "https://api.pdf.co/v1/pdf/optimize"));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // 12 Repair
 app.post("/api/repair-pdf", upload.single("file"), async (req, res) => {
-  const url = await uploadFile(req.file);
-  res.json(await process(url, "https://api.pdf.co/v1/pdf/repair"));
+  try {
+    const url = await uploadFile(req.file);
+    res.json(await processFile(url, "https://api.pdf.co/v1/pdf/repair"));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // 13 Protect
 app.post("/api/protect-pdf", upload.single("file"), async (req, res) => {
-  const url = await uploadFile(req.file);
-
-  const r = await fetch("https://api.pdf.co/v1/pdf/security/add", {
-    method: "POST",
-    headers: {
-      "x-api-key": API_KEY,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ url, password: "123456" })
-  });
-
-  res.json(await r.json());
+  try {
+    const url = await uploadFile(req.file);
+    res.json(await processFile(url, "https://api.pdf.co/v1/pdf/security/add", { password: "123456" }));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // 14 Unlock
 app.post("/api/unlock-pdf", upload.single("file"), async (req, res) => {
-  const url = await uploadFile(req.file);
-  res.json(await process(url, "https://api.pdf.co/v1/pdf/security/remove"));
+  try {
+    const url = await uploadFile(req.file);
+    res.json(await processFile(url, "https://api.pdf.co/v1/pdf/security/remove"));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // 15 Rotate
 app.post("/api/rotate-pdf", upload.single("file"), async (req, res) => {
-  const url = await uploadFile(req.file);
-  res.json(await process(url, "https://api.pdf.co/v1/pdf/rotate"));
+  try {
+    const url = await uploadFile(req.file);
+    res.json(await processFile(url, "https://api.pdf.co/v1/pdf/rotate"));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // 16 Watermark
 app.post("/api/watermark", upload.single("file"), async (req, res) => {
-  const url = await uploadFile(req.file);
-
-  const r = await fetch("https://api.pdf.co/v1/pdf/edit/add", {
-    method: "POST",
-    headers: {
-      "x-api-key": API_KEY,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ url, text: "PDF PRO MAX" })
-  });
-
-  res.json(await r.json());
+  try {
+    const url = await uploadFile(req.file);
+    res.json(await processFile(url, "https://api.pdf.co/v1/pdf/edit/add", { text: "PDF PRO MAX" }));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // 17 Page Numbers
 app.post("/api/page-numbers", upload.single("file"), async (req, res) => {
-  const url = await uploadFile(req.file);
-  res.json(await process(url, "https://api.pdf.co/v1/pdf/edit/add"));
+  try {
+    const url = await uploadFile(req.file);
+    res.json(await processFile(url, "https://api.pdf.co/v1/pdf/edit/add"));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // 18 PDF/A
 app.post("/api/pdf-to-pdfa", upload.single("file"), async (req, res) => {
-  const url = await uploadFile(req.file);
-  res.json(await process(url, "https://api.pdf.co/v1/pdf/convert/to/pdfa"));
+  try {
+    const url = await uploadFile(req.file);
+    res.json(await processFile(url, "https://api.pdf.co/v1/pdf/convert/to/pdfa"));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // 19 OCR
 app.post("/api/ocr-pdf", upload.single("file"), async (req, res) => {
-  const url = await uploadFile(req.file);
-  res.json(await process(url, "https://api.pdf.co/v1/pdf/convert/to/searchable"));
+  try {
+    const url = await uploadFile(req.file);
+    res.json(await processFile(url, "https://api.pdf.co/v1/pdf/convert/to/searchable"));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // 20 Extract Images
 app.post("/api/extract-images", upload.single("file"), async (req, res) => {
-  const url = await uploadFile(req.file);
-  res.json(await process(url, "https://api.pdf.co/v1/pdf/extract/images"));
+  try {
+    const url = await uploadFile(req.file);
+    res.json(await processFile(url, "https://api.pdf.co/v1/pdf/extract/images"));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // 21 Extract Pages
 app.post("/api/extract-pages", upload.single("file"), async (req, res) => {
-  const url = await uploadFile(req.file);
-  res.json(await process(url, "https://api.pdf.co/v1/pdf/split"));
+  try {
+    const url = await uploadFile(req.file);
+    res.json(await processFile(url, "https://api.pdf.co/v1/pdf/split"));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // 22 HTML → PDF
 app.post("/api/html-to-pdf", async (req, res) => {
-  const r = await fetch("https://api.pdf.co/v1/pdf/convert/from/url", {
-    method: "POST",
-    headers: {
-      "x-api-key": API_KEY,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ url: req.body.url })
-  });
-
-  res.json(await r.json());
+  try {
+    res.json(await processFile(req.body.url, "https://api.pdf.co/v1/pdf/convert/from/url"));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // 23 Delete Pages
 app.post("/api/delete-pages", upload.single("file"), async (req, res) => {
-  const url = await uploadFile(req.file);
-  res.json(await process(url, "https://api.pdf.co/v1/pdf/remove-pages"));
+  try {
+    const url = await uploadFile(req.file);
+    res.json(await processFile(url, "https://api.pdf.co/v1/pdf/remove-pages"));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ================= RUN =================
 
+// 🔥 مهم: بدون مشاكل PORT
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log("🔥 SERVER RUNNING 25 TOOLS");
+  console.log("🔥 SERVER RUNNING ON PORT " + PORT);
 });
