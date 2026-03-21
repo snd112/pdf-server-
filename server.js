@@ -15,7 +15,7 @@ const API_KEY = "a568hm8@gmail.com_odyW3q4nA6wA1XgMy6m5lMVDxZp39jaDDknjPVLQpN4dD
 
 // ================= TEST =================
 app.get("/", (req,res)=>{
-  res.send("🔥 PDFORGE MAX PRO RUNNING");
+  res.send("🔥 PDFORGE MAX PRO WORKING");
 });
 
 // ================= رفع الملف =================
@@ -30,11 +30,10 @@ async function uploadFile(file){
   });
 
   const data = await r.json();
-
-  console.log("UPLOAD RESULT:", data);
+  console.log("UPLOAD:", data);
 
   if(!data.url){
-    throw new Error(JSON.stringify(data));
+    throw new Error(data.message || "Upload failed");
   }
 
   return data.url;
@@ -50,14 +49,17 @@ async function process(url, endpoint, extra = {}){
     },
     body: JSON.stringify({
       url,
-      async:true,
+      async:false, // 🔥 مهم جدا
       ...extra
     })
   });
 
   const data = await r.json();
+  console.log("PROCESS:", data);
 
-  console.log("PROCESS RESULT:", data);
+  if(data.error){
+    throw new Error(data.message || "API Error");
+  }
 
   return data;
 }
@@ -70,10 +72,7 @@ const tools = {
   "pdf-to-excel": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/to/xlsx"),
   "pdf-to-ppt": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/to/pptx"),
 
-  "pdf-to-jpg": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/to/jpg",{
-    pages: "0-"
-  }),
-
+  "pdf-to-jpg": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/to/jpg",{ pages:"0-" }),
   "jpg-to-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/from/image"),
 
   // 📂 تنظيم
@@ -85,13 +84,13 @@ const tools = {
   "repair-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/repair"),
 
   // 🔒 حماية
-  "protect-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/security/add",{password:"123456"}),
+  "protect-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/security/add",{ password:"123456" }),
   "unlock-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/security/remove"),
 
   // ✏️ تعديل
   "rotate-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/rotate"),
   "delete-pages": (u)=>process(u,"https://api.pdf.co/v1/pdf/remove-pages"),
-  "watermark": (u)=>process(u,"https://api.pdf.co/v1/pdf/edit/add",{text:"PDFORGE"}),
+  "watermark": (u)=>process(u,"https://api.pdf.co/v1/pdf/edit/add",{ text:"PDFORGE" }),
   "page-numbers": (u)=>process(u,"https://api.pdf.co/v1/pdf/edit/add"),
 
   // 🧠 متقدم
@@ -105,13 +104,13 @@ app.post("/api/:tool", upload.single("file"), async (req,res)=>{
   try{
 
     if(!req.file){
-      return res.json({error:"❌ مفيش ملف"});
+      return res.json({error:true, message:"❌ مفيش ملف"});
     }
 
     const fn = tools[req.params.tool];
 
     if(!fn){
-      return res.json({error:"❌ الأداة مش موجودة"});
+      return res.json({error:true, message:"❌ الأداة مش موجودة"});
     }
 
     // رفع
@@ -120,8 +119,11 @@ app.post("/api/:tool", upload.single("file"), async (req,res)=>{
     // تنفيذ
     const result = await fn(fileUrl);
 
-    // 👇 نرجع الرد الحقيقي
-    res.json(result);
+    // 🔥 رجع رابط مباشر
+    res.json({
+      success:true,
+      download: result.url || result.urls
+    });
 
   }catch(e){
     console.log("ERROR:", e.message);
@@ -133,24 +135,9 @@ app.post("/api/:tool", upload.single("file"), async (req,res)=>{
   }
 });
 
-// ================= متابعة =================
-app.get("/api/check", async (req,res)=>{
-  try{
-    const r = await fetch(req.query.url);
-    const data = await r.json();
-
-    console.log("CHECK:", data);
-
-    res.json(data);
-
-  }catch(e){
-    res.json({error:e.message});
-  }
-});
-
 // ================= تشغيل =================
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, ()=>{
-  console.log("🔥 SERVER WORKING WITH DEBUG");
+  console.log("🔥 PDFORGE SERVER RUNNING");
 });
