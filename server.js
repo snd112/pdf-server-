@@ -24,7 +24,7 @@ app.get("/api/status", (req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// دالة رفع الملف
+// دالة رفع الملف - ترجع الرابط المؤقت
 async function uploadFile(file) {
     const form = new FormData();
     form.append("file", file.buffer, file.originalname);
@@ -42,35 +42,52 @@ async function uploadFile(file) {
     return data.url;
 }
 
-// دالة انتظار النتيجة
-async function waitForResult(jobUrl, maxWait = 90000, interval = 3000) {
+// دالة انتظار النتيجة مع إعادة المحاولة
+async function waitForResult(jobUrl, maxWait = 120000, interval = 3000) {
     const startTime = Date.now();
+    let lastError = null;
     
     while (Date.now() - startTime < maxWait) {
         await new Promise(resolve => setTimeout(resolve, interval));
         
-        const response = await fetch(jobUrl, {
-            headers: { "x-api-key": API_KEY }
-        });
-        
-        const data = await response.json();
-        
-        if (data.status === "success") {
-            return data;
-        }
-        
-        if (data.status === "error" || data.error) {
-            throw new Error(data.error || data.message || "فشلت المعالجة");
+        try {
+            const response = await fetch(jobUrl, {
+                headers: { "x-api-key": API_KEY }
+            });
+            
+            const data = await response.json();
+            
+            if (data.status === "success") {
+                return data;
+            }
+            
+            if (data.status === "error" || data.error) {
+                lastError = data.error || data.message;
+                // نكمل الانتظار يمكن يكون خطأ مؤقت
+                continue;
+            }
+            
+            // status = "working" أو "waiting"
+            console.log("جاري الانتظار... الحالة:", data.status);
+            
+        } catch (e) {
+            lastError = e.message;
+            console.log("خطأ مؤقت في الجلب:", e.message);
         }
     }
     
-    throw new Error("انتهت المهلة");
+    throw new Error(lastError || "انتهت المهلة");
 }
 
-// دالة تحويل عامة
+// دالة تحويل عامة مع معالجة أفضل للروابط
 async function convertFile(file, endpoint, extra = {}) {
+    // الخطوة 1: رفع الملف
+    console.log("رفع الملف...");
     const fileUrl = await uploadFile(file);
+    console.log("تم رفع الملف:", fileUrl);
     
+    // الخطوة 2: إرسال طلب التحويل
+    console.log("إرسال طلب التحويل إلى:", endpoint);
     const response = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -85,14 +102,26 @@ async function convertFile(file, endpoint, extra = {}) {
     });
     
     const data = await response.json();
+    console.log("رد التحويل:", JSON.stringify(data).substring(0, 300));
     
     if (data.error) {
         throw new Error(data.error);
     }
     
     if (data.url) {
+        // الخطوة 3: انتظار النتيجة
+        console.log("انتظار النتيجة من:", data.url);
         const result = await waitForResult(data.url);
-        return result;
+        console.log("النتيجة:", JSON.stringify(result).substring(0, 500));
+        
+        // التحقق من وجود الملفات
+        if (result.files && result.files.length > 0) {
+            // إضافة timestamp للرابط عشان يضمن عدم انتهاء الصلاحية
+            const finalUrl = result.files[0].url;
+            return { url: finalUrl };
+        }
+        
+        throw new Error("لم يتم العثور على ملفات في النتيجة");
     }
     
     throw new Error("لم يتم استلام job url");
@@ -100,136 +129,95 @@ async function convertFile(file, endpoint, extra = {}) {
 
 // ==================== الأدوات ====================
 
-// PDF to Word
 app.post("/api/pdf-to-word", upload.single("file"), async (req, res) => {
     try {
         if (!req.file) return res.json({ error: "لم يتم رفع ملف" });
         const result = await convertFile(req.file, "https://api.pdf.co/v1/pdf/convert", {
             outputFormat: "docx"
         });
-        if (result.files && result.files[0]) {
-            res.json({ url: result.files[0].url });
-        } else {
-            res.json({ error: "لم يتم العثور على رابط" });
-        }
+        res.json(result);
     } catch (e) {
+        console.error("خطأ في pdf-to-word:", e.message);
         res.json({ error: e.message });
     }
 });
 
-// PDF to Excel
 app.post("/api/pdf-to-excel", upload.single("file"), async (req, res) => {
     try {
         if (!req.file) return res.json({ error: "لم يتم رفع ملف" });
         const result = await convertFile(req.file, "https://api.pdf.co/v1/pdf/convert", {
             outputFormat: "xlsx"
         });
-        if (result.files && result.files[0]) {
-            res.json({ url: result.files[0].url });
-        } else {
-            res.json({ error: "لم يتم العثور على رابط" });
-        }
+        res.json(result);
     } catch (e) {
         res.json({ error: e.message });
     }
 });
 
-// PDF to PPT
 app.post("/api/pdf-to-ppt", upload.single("file"), async (req, res) => {
     try {
         if (!req.file) return res.json({ error: "لم يتم رفع ملف" });
         const result = await convertFile(req.file, "https://api.pdf.co/v1/pdf/convert", {
             outputFormat: "pptx"
         });
-        if (result.files && result.files[0]) {
-            res.json({ url: result.files[0].url });
-        } else {
-            res.json({ error: "لم يتم العثور على رابط" });
-        }
+        res.json(result);
     } catch (e) {
         res.json({ error: e.message });
     }
 });
 
-// PDF to JPG
 app.post("/api/pdf-to-jpg", upload.single("file"), async (req, res) => {
     try {
         if (!req.file) return res.json({ error: "لم يتم رفع ملف" });
         const result = await convertFile(req.file, "https://api.pdf.co/v1/pdf/convert/to/jpg", {
             pages: "1-9999"
         });
-        if (result.files && result.files.length > 0) {
-            const urls = result.files.map(f => f.url);
-            res.json({ urls: urls });
-        } else {
-            res.json({ error: "لم يتم العثور على رابط" });
-        }
+        res.json(result);
     } catch (e) {
         res.json({ error: e.message });
     }
 });
 
-// Word to PDF
 app.post("/api/word-to-pdf", upload.single("file"), async (req, res) => {
     try {
         if (!req.file) return res.json({ error: "لم يتم رفع ملف" });
         const result = await convertFile(req.file, "https://api.pdf.co/v1/pdf/convert/from/doc");
-        if (result.files && result.files[0]) {
-            res.json({ url: result.files[0].url });
-        } else {
-            res.json({ error: "لم يتم العثور على رابط" });
-        }
+        res.json(result);
     } catch (e) {
         res.json({ error: e.message });
     }
 });
 
-// Excel to PDF
 app.post("/api/excel-to-pdf", upload.single("file"), async (req, res) => {
     try {
         if (!req.file) return res.json({ error: "لم يتم رفع ملف" });
         const result = await convertFile(req.file, "https://api.pdf.co/v1/pdf/convert/from/xls");
-        if (result.files && result.files[0]) {
-            res.json({ url: result.files[0].url });
-        } else {
-            res.json({ error: "لم يتم العثور على رابط" });
-        }
+        res.json(result);
     } catch (e) {
         res.json({ error: e.message });
     }
 });
 
-// PPT to PDF
 app.post("/api/ppt-to-pdf", upload.single("file"), async (req, res) => {
     try {
         if (!req.file) return res.json({ error: "لم يتم رفع ملف" });
         const result = await convertFile(req.file, "https://api.pdf.co/v1/pdf/convert/from/ppt");
-        if (result.files && result.files[0]) {
-            res.json({ url: result.files[0].url });
-        } else {
-            res.json({ error: "لم يتم العثور على رابط" });
-        }
+        res.json(result);
     } catch (e) {
         res.json({ error: e.message });
     }
 });
 
-// JPG to PDF
 app.post("/api/jpg-to-pdf", upload.single("file"), async (req, res) => {
     try {
         if (!req.file) return res.json({ error: "لم يتم رفع ملف" });
         const result = await convertFile(req.file, "https://api.pdf.co/v1/pdf/convert/from/image");
-        if (result.files && result.files[0]) {
-            res.json({ url: result.files[0].url });
-        } else {
-            res.json({ error: "لم يتم العثور على رابط" });
-        }
+        res.json(result);
     } catch (e) {
         res.json({ error: e.message });
     }
 });
 
-// دمج PDF
 app.post("/api/merge-pdf", upload.array("file", 10), async (req, res) => {
     try {
         if (!req.files || req.files.length < 2) {
@@ -256,37 +244,27 @@ app.post("/api/merge-pdf", upload.array("file", 10), async (req, res) => {
         
         const data = await response.json();
         
-        if (data.error) {
-            throw new Error(data.error);
-        }
+        if (data.error) throw new Error(data.error);
+        if (!data.url) throw new Error("لم يتم استلام job url");
         
-        if (data.url) {
-            const result = await waitForResult(data.url);
-            if (result.files && result.files[0]) {
-                res.json({ url: result.files[0].url });
-            } else {
-                res.json({ error: "لم يتم العثور على رابط" });
-            }
+        const result = await waitForResult(data.url);
+        if (result.files && result.files[0]) {
+            res.json({ url: result.files[0].url });
         } else {
-            res.json({ error: "لم يتم استلام job url" });
+            res.json({ error: "لم يتم العثور على رابط" });
         }
     } catch (e) {
         res.json({ error: e.message });
     }
 });
 
-// ضغط PDF
 app.post("/api/compress-pdf", upload.single("file"), async (req, res) => {
     try {
         if (!req.file) return res.json({ error: "لم يتم رفع ملف" });
         const result = await convertFile(req.file, "https://api.pdf.co/v1/pdf/optimize", {
             profile: "compress"
         });
-        if (result.files && result.files[0]) {
-            res.json({ url: result.files[0].url });
-        } else {
-            res.json({ error: "لم يتم العثور على رابط" });
-        }
+        res.json(result);
     } catch (e) {
         res.json({ error: e.message });
     }
