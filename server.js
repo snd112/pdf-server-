@@ -13,48 +13,46 @@ const upload = multer({ storage: multer.memoryStorage() });
 const API_KEY = "a568hm8@gmail.com_odyW3q4nA6wA1XgMy6m5lMVDxZp39jaDDknjPVLQpN4dDDmN69yMk8HF7pIi5Rze";
 
 app.get("/", (req, res) => {
-    res.json({ status: "ok", message: "PDF PRO MAX" });
+    res.json({ 
+        status: "running", 
+        message: "🔥 PDF PRO MAX SERVER",
+        endpoints: [
+            "/api/pdf-to-word", "/api/pdf-to-excel", "/api/pdf-to-ppt", "/api/pdf-to-jpg",
+            "/api/word-to-pdf", "/api/excel-to-pdf", "/api/ppt-to-pdf", "/api/jpg-to-pdf",
+            "/api/merge-pdf", "/api/compress-pdf"
+        ]
+    });
 });
 
 app.get("/api/status", (req, res) => {
-    res.json({ status: "ok" });
+    res.json({ status: "ok", time: new Date().toISOString() });
 });
 
-// أسهل endpoint: PDF to Word
+// دالة رفع الملف
+async function uploadFile(file) {
+    const form = new FormData();
+    form.append("file", file.buffer, file.originalname);
+
+    const response = await fetch("https://api.pdf.co/v1/file/upload", {
+        method: "POST",
+        headers: { "x-api-key": API_KEY },
+        body: form
+    });
+
+    const data = await response.json();
+    if (!data.url) {
+        throw new Error(data.error || data.message || "فشل رفع الملف");
+    }
+    return data.url;
+}
+
+// ==================== PDF to Word ====================
 app.post("/api/pdf-to-word", upload.single("file"), async (req, res) => {
     try {
-        console.log("📥 استلام طلب");
+        if (!req.file) return res.json({ error: "لم يتم رفع ملف" });
         
-        if (!req.file) {
-            console.log("❌ لا يوجد ملف");
-            return res.status(400).json({ error: "لا يوجد ملف" });
-        }
+        const fileUrl = await uploadFile(req.file);
         
-        console.log(`📄 اسم الملف: ${req.file.originalname}`);
-        console.log(`📦 حجم الملف: ${req.file.size} بايت`);
-        
-        // 1. رفع الملف
-        console.log("📤 جاري رفع الملف إلى PDF.co...");
-        const formData = new FormData();
-        formData.append("file", req.file.buffer, req.file.originalname);
-        
-        const uploadRes = await fetch("https://api.pdf.co/v1/file/upload", {
-            method: "POST",
-            headers: { "x-api-key": API_KEY },
-            body: formData
-        });
-        
-        const uploadData = await uploadRes.json();
-        console.log("📤 رد رفع الملف:", JSON.stringify(uploadData));
-        
-        if (!uploadData.url) {
-            return res.json({ error: "فشل رفع الملف: " + JSON.stringify(uploadData) });
-        }
-        
-        console.log("✅ تم رفع الملف:", uploadData.url);
-        
-        // 2. التحويل
-        console.log("🔄 جاري التحويل إلى Word...");
         const convertRes = await fetch("https://api.pdf.co/v1/pdf/convert", {
             method: "POST",
             headers: {
@@ -62,58 +60,94 @@ app.post("/api/pdf-to-word", upload.single("file"), async (req, res) => {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                url: uploadData.url,
+                url: fileUrl,
                 outputFormat: "docx",
                 async: false
             })
         });
         
-        const convertData = await convertRes.json();
-        console.log("🔄 رد التحويل:", JSON.stringify(convertData));
+        const data = await convertRes.json();
         
-        // 3. إرجاع النتيجة
-        if (convertData.url) {
-            return res.json({ url: convertData.url });
-        }
+        if (data.url) return res.json({ url: data.url });
+        if (data.files?.[0]?.url) return res.json({ url: data.files[0].url });
         
-        if (convertData.files && convertData.files[0] && convertData.files[0].url) {
-            return res.json({ url: convertData.files[0].url });
-        }
+        res.json({ error: data.error || "فشل التحويل", details: data });
         
-        return res.json({ 
-            error: convertData.error || convertData.message || "فشل التحويل",
-            details: convertData
-        });
-        
-    } catch (err) {
-        console.error("❌ خطأ:", err.message);
-        res.json({ error: err.message });
+    } catch (e) {
+        res.json({ error: e.message });
     }
 });
 
-// PDF to JPG
-app.post("/api/pdf-to-jpg", upload.single("file"), async (req, res) => {
+// ==================== PDF to Excel ====================
+app.post("/api/pdf-to-excel", upload.single("file"), async (req, res) => {
     try {
-        if (!req.file) {
-            return res.json({ error: "لا يوجد ملف" });
-        }
+        if (!req.file) return res.json({ error: "لم يتم رفع ملف" });
         
-        console.log("📥 PDF to JPG:", req.file.originalname);
+        const fileUrl = await uploadFile(req.file);
         
-        const formData = new FormData();
-        formData.append("file", req.file.buffer, req.file.originalname);
-        
-        const uploadRes = await fetch("https://api.pdf.co/v1/file/upload", {
+        const convertRes = await fetch("https://api.pdf.co/v1/pdf/convert", {
             method: "POST",
-            headers: { "x-api-key": API_KEY },
-            body: formData
+            headers: {
+                "x-api-key": API_KEY,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                url: fileUrl,
+                outputFormat: "xlsx",
+                async: false
+            })
         });
         
-        const uploadData = await uploadRes.json();
+        const data = await convertRes.json();
         
-        if (!uploadData.url) {
-            return res.json({ error: "فشل رفع الملف" });
-        }
+        if (data.url) return res.json({ url: data.url });
+        if (data.files?.[0]?.url) return res.json({ url: data.files[0].url });
+        
+        res.json({ error: data.error || "فشل التحويل" });
+        
+    } catch (e) {
+        res.json({ error: e.message });
+    }
+});
+
+// ==================== PDF to PPT ====================
+app.post("/api/pdf-to-ppt", upload.single("file"), async (req, res) => {
+    try {
+        if (!req.file) return res.json({ error: "لم يتم رفع ملف" });
+        
+        const fileUrl = await uploadFile(req.file);
+        
+        const convertRes = await fetch("https://api.pdf.co/v1/pdf/convert", {
+            method: "POST",
+            headers: {
+                "x-api-key": API_KEY,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                url: fileUrl,
+                outputFormat: "pptx",
+                async: false
+            })
+        });
+        
+        const data = await convertRes.json();
+        
+        if (data.url) return res.json({ url: data.url });
+        if (data.files?.[0]?.url) return res.json({ url: data.files[0].url });
+        
+        res.json({ error: data.error || "فشل التحويل" });
+        
+    } catch (e) {
+        res.json({ error: e.message });
+    }
+});
+
+// ==================== PDF to JPG ====================
+app.post("/api/pdf-to-jpg", upload.single("file"), async (req, res) => {
+    try {
+        if (!req.file) return res.json({ error: "لم يتم رفع ملف" });
+        
+        const fileUrl = await uploadFile(req.file);
         
         const convertRes = await fetch("https://api.pdf.co/v1/pdf/convert/to/jpg", {
             method: "POST",
@@ -122,48 +156,124 @@ app.post("/api/pdf-to-jpg", upload.single("file"), async (req, res) => {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                url: uploadData.url,
+                url: fileUrl,
                 pages: "1",
                 async: false
             })
         });
         
-        const convertData = await convertRes.json();
+        const data = await convertRes.json();
         
-        if (convertData.files && convertData.files[0]) {
-            return res.json({ url: convertData.files[0].url });
+        if (data.files && data.files[0]) {
+            return res.json({ url: data.files[0].url });
         }
         
-        return res.json({ error: convertData.error || "فشل التحويل" });
+        res.json({ error: data.error || "فشل التحويل" });
         
-    } catch (err) {
-        res.json({ error: err.message });
+    } catch (e) {
+        res.json({ error: e.message });
     }
 });
 
-// JPG to PDF
-app.post("/api/jpg-to-pdf", upload.single("file"), async (req, res) => {
+// ==================== Word to PDF ====================
+app.post("/api/word-to-pdf", upload.single("file"), async (req, res) => {
     try {
-        if (!req.file) {
-            return res.json({ error: "لا يوجد ملف" });
-        }
+        if (!req.file) return res.json({ error: "لم يتم رفع ملف" });
         
-        console.log("📥 JPG to PDF:", req.file.originalname);
+        const fileUrl = await uploadFile(req.file);
         
-        const formData = new FormData();
-        formData.append("file", req.file.buffer, req.file.originalname);
-        
-        const uploadRes = await fetch("https://api.pdf.co/v1/file/upload", {
+        const convertRes = await fetch("https://api.pdf.co/v1/pdf/convert/from/doc", {
             method: "POST",
-            headers: { "x-api-key": API_KEY },
-            body: formData
+            headers: {
+                "x-api-key": API_KEY,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                url: fileUrl,
+                async: false
+            })
         });
         
-        const uploadData = await uploadRes.json();
+        const data = await convertRes.json();
         
-        if (!uploadData.url) {
-            return res.json({ error: "فشل رفع الملف" });
-        }
+        if (data.url) return res.json({ url: data.url });
+        if (data.files?.[0]?.url) return res.json({ url: data.files[0].url });
+        
+        res.json({ error: data.error || "فشل التحويل" });
+        
+    } catch (e) {
+        res.json({ error: e.message });
+    }
+});
+
+// ==================== Excel to PDF ====================
+app.post("/api/excel-to-pdf", upload.single("file"), async (req, res) => {
+    try {
+        if (!req.file) return res.json({ error: "لم يتم رفع ملف" });
+        
+        const fileUrl = await uploadFile(req.file);
+        
+        const convertRes = await fetch("https://api.pdf.co/v1/pdf/convert/from/xls", {
+            method: "POST",
+            headers: {
+                "x-api-key": API_KEY,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                url: fileUrl,
+                async: false
+            })
+        });
+        
+        const data = await convertRes.json();
+        
+        if (data.url) return res.json({ url: data.url });
+        if (data.files?.[0]?.url) return res.json({ url: data.files[0].url });
+        
+        res.json({ error: data.error || "فشل التحويل" });
+        
+    } catch (e) {
+        res.json({ error: e.message });
+    }
+});
+
+// ==================== PPT to PDF ====================
+app.post("/api/ppt-to-pdf", upload.single("file"), async (req, res) => {
+    try {
+        if (!req.file) return res.json({ error: "لم يتم رفع ملف" });
+        
+        const fileUrl = await uploadFile(req.file);
+        
+        const convertRes = await fetch("https://api.pdf.co/v1/pdf/convert/from/ppt", {
+            method: "POST",
+            headers: {
+                "x-api-key": API_KEY,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                url: fileUrl,
+                async: false
+            })
+        });
+        
+        const data = await convertRes.json();
+        
+        if (data.url) return res.json({ url: data.url });
+        if (data.files?.[0]?.url) return res.json({ url: data.files[0].url });
+        
+        res.json({ error: data.error || "فشل التحويل" });
+        
+    } catch (e) {
+        res.json({ error: e.message });
+    }
+});
+
+// ==================== JPG to PDF ====================
+app.post("/api/jpg-to-pdf", upload.single("file"), async (req, res) => {
+    try {
+        if (!req.file) return res.json({ error: "لم يتم رفع ملف" });
+        
+        const fileUrl = await uploadFile(req.file);
         
         const convertRes = await fetch("https://api.pdf.co/v1/pdf/convert/from/image", {
             method: "POST",
@@ -172,25 +282,93 @@ app.post("/api/jpg-to-pdf", upload.single("file"), async (req, res) => {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                url: uploadData.url,
+                url: fileUrl,
                 async: false
             })
         });
         
-        const convertData = await convertRes.json();
+        const data = await convertRes.json();
         
-        if (convertData.url) {
-            return res.json({ url: convertData.url });
+        if (data.url) return res.json({ url: data.url });
+        if (data.files?.[0]?.url) return res.json({ url: data.files[0].url });
+        
+        res.json({ error: data.error || "فشل التحويل" });
+        
+    } catch (e) {
+        res.json({ error: e.message });
+    }
+});
+
+// ==================== دمج PDF ====================
+app.post("/api/merge-pdf", upload.array("file", 10), async (req, res) => {
+    try {
+        if (!req.files || req.files.length < 2) {
+            return res.json({ error: "يجب رفع ملفين على الأقل للدمج" });
         }
         
-        return res.json({ error: convertData.error || "فشل التحويل" });
+        const urls = [];
+        for (const file of req.files) {
+            const url = await uploadFile(file);
+            urls.push(url);
+        }
         
-    } catch (err) {
-        res.json({ error: err.message });
+        const mergeRes = await fetch("https://api.pdf.co/v1/pdf/merge", {
+            method: "POST",
+            headers: {
+                "x-api-key": API_KEY,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                urls: urls,
+                async: false
+            })
+        });
+        
+        const data = await mergeRes.json();
+        
+        if (data.url) return res.json({ url: data.url });
+        if (data.files?.[0]?.url) return res.json({ url: data.files[0].url });
+        
+        res.json({ error: data.error || "فشل الدمج" });
+        
+    } catch (e) {
+        res.json({ error: e.message });
+    }
+});
+
+// ==================== ضغط PDF ====================
+app.post("/api/compress-pdf", upload.single("file"), async (req, res) => {
+    try {
+        if (!req.file) return res.json({ error: "لم يتم رفع ملف" });
+        
+        const fileUrl = await uploadFile(req.file);
+        
+        const compressRes = await fetch("https://api.pdf.co/v1/pdf/optimize", {
+            method: "POST",
+            headers: {
+                "x-api-key": API_KEY,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                url: fileUrl,
+                profile: "compress",
+                async: false
+            })
+        });
+        
+        const data = await compressRes.json();
+        
+        if (data.url) return res.json({ url: data.url });
+        if (data.files?.[0]?.url) return res.json({ url: data.files[0].url });
+        
+        res.json({ error: data.error || "فشل الضغط" });
+        
+    } catch (e) {
+        res.json({ error: e.message });
     }
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`🔥 Server running on port ${PORT}`);
+    console.log(`🔥 PDF PRO MAX SERVER running on port ${PORT}`);
 });
