@@ -11,7 +11,7 @@ app.use(express.json());
 const upload = multer();
 
 // 🔐 API KEY
-const API_KEY = "PUT_YOUR_API_KEY_HERE";
+const API_KEY = "a568hm8@gmail.com_odyW3q4nA6wA1XgMy6m5lMVDxZp39jaDDknjPVLQpN4dDDmN69yMk8HF7pIi5Rze";
 
 // ✅ Test
 app.get("/", (req, res) => {
