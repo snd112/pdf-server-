@@ -31,6 +31,8 @@ async function uploadFile(file){
 
   const data = await r.json();
 
+  console.log("UPLOAD RESULT:", data);
+
   if(!data.url){
     throw new Error(JSON.stringify(data));
   }
@@ -53,7 +55,11 @@ async function process(url, endpoint, extra = {}){
     })
   });
 
-  return await r.json();
+  const data = await r.json();
+
+  console.log("PROCESS RESULT:", data);
+
+  return data;
 }
 
 // ================= الأدوات =================
@@ -64,7 +70,10 @@ const tools = {
   "pdf-to-excel": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/to/xlsx"),
   "pdf-to-ppt": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/to/pptx"),
 
-  "pdf-to-jpg": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/to/jpg"),
+  "pdf-to-jpg": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/to/jpg",{
+    pages: "0-"
+  }),
+
   "jpg-to-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/from/image"),
 
   // 📂 تنظيم
@@ -100,19 +109,23 @@ app.post("/api/:tool", upload.single("file"), async (req,res)=>{
     }
 
     const fn = tools[req.params.tool];
+
     if(!fn){
       return res.json({error:"❌ الأداة مش موجودة"});
     }
 
-    // رفع الملف
+    // رفع
     const fileUrl = await uploadFile(req.file);
 
-    // تنفيذ العملية
+    // تنفيذ
     const result = await fn(fileUrl);
 
+    // 👇 نرجع الرد الحقيقي
     res.json(result);
 
   }catch(e){
+    console.log("ERROR:", e.message);
+
     res.json({
       error:true,
       message:e.message
@@ -120,20 +133,24 @@ app.post("/api/:tool", upload.single("file"), async (req,res)=>{
   }
 });
 
-// ================= متابعة التحويل =================
+// ================= متابعة =================
 app.get("/api/check", async (req,res)=>{
   try{
     const r = await fetch(req.query.url);
     const data = await r.json();
+
+    console.log("CHECK:", data);
+
     res.json(data);
+
   }catch(e){
     res.json({error:e.message});
   }
 });
 
-// ================= تشغيل السيرفر =================
+// ================= تشغيل =================
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, ()=>{
-  console.log("🔥 SERVER WORKING 100%");
+  console.log("🔥 SERVER WORKING WITH DEBUG");
 });
