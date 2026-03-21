@@ -9,7 +9,7 @@ app.use(cors());
 app.use(express.json());
 
 const upload = multer();
-const API_KEY = process.env.API_KEY;
+const API_KEY = "secret_key_9b76e3e89ab9ee53792702309ead5a02_aHxqy433f58350fab5ed7e0ee94066a799c06";
 
 // 🔥 دالة موحدة
 async function send(url, formData) {
