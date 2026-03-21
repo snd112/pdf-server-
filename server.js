@@ -1,32 +1,30 @@
 const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
+const fetch = require("node-fetch");
 const FormData = require("form-data");
 
 const app = express();
-const upload = multer();
-
 app.use(cors());
 app.use(express.json());
 
-const API_KEY = process.env.PDF_API_KEY;
+const upload = multer();
+const API_KEY = process.env.API_KEY;
 
-// ================= ROOT =================
-app.get("/", (req, res) => {
-  res.send("🔥 PDF SERVER WORKING 25 TOOLS");
-});
-
-// ================= HELPER =================
+// 🔥 دالة موحدة
 async function send(url, formData) {
   const res = await fetch(url, {
     method: "POST",
-    headers: {
-      "x-api-key": API_KEY
-    },
+    headers: { "x-api-key": API_KEY },
     body: formData
   });
   return await res.json();
 }
+
+// 🟢 Test
+app.get("/", (req, res) => {
+  res.send("🔥 PDF SERVER WORKING 25 TOOLS");
+});
 
 // ================= TOOLS =================
 
@@ -38,9 +36,9 @@ app.post("/api/pdf-to-jpg", upload.single("file"), async (req, res) => {
 });
 
 // JPG → PDF
-app.post("/api/jpg-to-pdf", upload.array("files"), async (req, res) => {
+app.post("/api/jpg-to-pdf", upload.single("file"), async (req, res) => {
   let f = new FormData();
-  req.files.forEach(x => f.append("files", x.buffer, x.originalname));
+  f.append("file", req.file.buffer, req.file.originalname);
   res.json(await send("https://api.pdf.co/v1/pdf/convert/from/image", f));
 });
 
@@ -55,7 +53,7 @@ app.post("/api/pdf-to-word", upload.single("file"), async (req, res) => {
 app.post("/api/word-to-pdf", upload.single("file"), async (req, res) => {
   let f = new FormData();
   f.append("file", req.file.buffer, req.file.originalname);
-  res.json(await send("https://api.pdf.co/v1/pdf/convert/from/doc", f));
+  res.json(await send("https://api.pdf.co/v1/pdf/convert/to/pdf", f));
 });
 
 // PDF → Excel
@@ -69,7 +67,7 @@ app.post("/api/pdf-to-excel", upload.single("file"), async (req, res) => {
 app.post("/api/excel-to-pdf", upload.single("file"), async (req, res) => {
   let f = new FormData();
   f.append("file", req.file.buffer, req.file.originalname);
-  res.json(await send("https://api.pdf.co/v1/pdf/convert/from/xls", f));
+  res.json(await send("https://api.pdf.co/v1/pdf/convert/to/pdf", f));
 });
 
 // PDF → PPT
@@ -83,20 +81,15 @@ app.post("/api/pdf-to-ppt", upload.single("file"), async (req, res) => {
 app.post("/api/ppt-to-pdf", upload.single("file"), async (req, res) => {
   let f = new FormData();
   f.append("file", req.file.buffer, req.file.originalname);
-  res.json(await send("https://api.pdf.co/v1/pdf/convert/from/ppt", f));
-});
-
-// PDF → Text
-app.post("/api/pdf-to-text", upload.single("file"), async (req, res) => {
-  let f = new FormData();
-  f.append("file", req.file.buffer, req.file.originalname);
-  res.json(await send("https://api.pdf.co/v1/pdf/convert/to/text", f));
+  res.json(await send("https://api.pdf.co/v1/pdf/convert/to/pdf", f));
 });
 
 // Merge
 app.post("/api/merge-pdf", upload.array("files"), async (req, res) => {
   let f = new FormData();
-  req.files.forEach(x => f.append("files", x.buffer, x.originalname));
+  req.files.forEach(file => {
+    f.append("file", file.buffer, file.originalname);
+  });
   res.json(await send("https://api.pdf.co/v1/pdf/merge", f));
 });
 
@@ -107,25 +100,11 @@ app.post("/api/split-pdf", upload.single("file"), async (req, res) => {
   res.json(await send("https://api.pdf.co/v1/pdf/split", f));
 });
 
-// Delete pages
-app.post("/api/delete-pages", upload.single("file"), async (req, res) => {
-  let f = new FormData();
-  f.append("file", req.file.buffer, req.file.originalname);
-  res.json(await send("https://api.pdf.co/v1/pdf/remove-pages", f));
-});
-
 // Compress
 app.post("/api/compress-pdf", upload.single("file"), async (req, res) => {
   let f = new FormData();
   f.append("file", req.file.buffer, req.file.originalname);
   res.json(await send("https://api.pdf.co/v1/pdf/optimize", f));
-});
-
-// Repair
-app.post("/api/repair-pdf", upload.single("file"), async (req, res) => {
-  let f = new FormData();
-  f.append("file", req.file.buffer, req.file.originalname);
-  res.json(await send("https://api.pdf.co/v1/pdf/repair", f));
 });
 
 // Protect
@@ -154,7 +133,7 @@ app.post("/api/rotate-pdf", upload.single("file"), async (req, res) => {
 app.post("/api/watermark", upload.single("file"), async (req, res) => {
   let f = new FormData();
   f.append("file", req.file.buffer, req.file.originalname);
-  f.append("text", "PDF PRO");
+  f.append("text", "PDF PRO MAX");
   res.json(await send("https://api.pdf.co/v1/pdf/edit/add", f));
 });
 
@@ -163,13 +142,6 @@ app.post("/api/page-numbers", upload.single("file"), async (req, res) => {
   let f = new FormData();
   f.append("file", req.file.buffer, req.file.originalname);
   res.json(await send("https://api.pdf.co/v1/pdf/edit/add", f));
-});
-
-// PDF/A
-app.post("/api/pdf-to-pdfa", upload.single("file"), async (req, res) => {
-  let f = new FormData();
-  f.append("file", req.file.buffer, req.file.originalname);
-  res.json(await send("https://api.pdf.co/v1/pdf/convert/to/pdfa", f));
 });
 
 // OCR
@@ -186,29 +158,30 @@ app.post("/api/extract-images", upload.single("file"), async (req, res) => {
   res.json(await send("https://api.pdf.co/v1/pdf/extract/images", f));
 });
 
-// Extract Pages
-app.post("/api/extract-pages", upload.single("file"), async (req, res) => {
+// Repair
+app.post("/api/repair-pdf", upload.single("file"), async (req, res) => {
   let f = new FormData();
   f.append("file", req.file.buffer, req.file.originalname);
-  res.json(await send("https://api.pdf.co/v1/pdf/split", f));
+  res.json(await send("https://api.pdf.co/v1/pdf/repair", f));
 });
 
-// HTML → PDF
-app.post("/api/html-to-pdf", async (req, res) => {
-  const r = await fetch("https://api.pdf.co/v1/pdf/convert/from/url", {
-    method: "POST",
-    headers: {
-      "x-api-key": API_KEY,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ url: req.body.url })
-  });
-  res.json(await r.json());
+// PDF/A
+app.post("/api/pdf-to-pdfa", upload.single("file"), async (req, res) => {
+  let f = new FormData();
+  f.append("file", req.file.buffer, req.file.originalname);
+  res.json(await send("https://api.pdf.co/v1/pdf/convert/to/pdfa", f));
+});
+
+// Delete Pages
+app.post("/api/delete-pages", upload.single("file"), async (req, res) => {
+  let f = new FormData();
+  f.append("file", req.file.buffer, req.file.originalname);
+  res.json(await send("https://api.pdf.co/v1/pdf/remove-pages", f));
 });
 
 // ================= RUN =================
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log("🔥 SERVER RUNNING WITH 25 TOOLS");
+  console.log("🔥 SERVER RUNNING 25 TOOLS");
 });
