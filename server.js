@@ -10,12 +10,13 @@ app.use(express.json());
 
 const upload = multer();
 
-// ✅ API جاهز
+// 🔑 API KEY (جاهز)
 const API_KEY = "a568hm8@gmail.com_odyW3q4nA6wA1XgMy6m5lMVDxZp39jaDDknjPVLQpN4dDDmN69yMk8HF7pIi5Rze";
 
+// test
 app.get("/", (req,res)=>res.send("🔥 PDFORGE MAX PRO RUNNING"));
 
-// رفع
+// ================= رفع ملف =================
 async function uploadFile(file){
   const form = new FormData();
   form.append("file", file.buffer, file.originalname);
@@ -31,7 +32,7 @@ async function uploadFile(file){
   return data.url;
 }
 
-// async process
+// ================= تنفيذ API =================
 async function process(url, endpoint, extra = {}){
   const r = await fetch(endpoint,{
     method:"POST",
@@ -41,7 +42,7 @@ async function process(url, endpoint, extra = {}){
     },
     body: JSON.stringify({
       url,
-      async:true,
+      async: true,
       ...extra
     })
   });
@@ -49,58 +50,46 @@ async function process(url, endpoint, extra = {}){
   return await r.json();
 }
 
-// convert
-async function convert(url, format){
-  const r = await fetch("https://api.pdf.co/v1/pdf/convert",{
-    method:"POST",
-    headers:{
-      "x-api-key": API_KEY,
-      "Content-Type":"application/json"
-    },
-    body: JSON.stringify({
-      url,
-      async:true,
-      outputFormat: format
-    })
-  });
-
-  return await r.json();
-}
-
-// 🔥 الأدوات كلها
+// ================= الأدوات =================
 const tools = {
-  "pdf-to-word": (u)=>convert(u,"docx"),
-  "pdf-to-excel": (u)=>convert(u,"xlsx"),
-  "pdf-to-ppt": (u)=>convert(u,"pptx"),
-  "word-to-pdf": (u)=>convert(u,"pdf"),
-  "excel-to-pdf": (u)=>convert(u,"pdf"),
-  "ppt-to-pdf": (u)=>convert(u,"pdf"),
+
+  // 🔥 تحويل
+  "pdf-to-word": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/to/doc"),
+  "pdf-to-excel": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/to/xlsx"),
+  "pdf-to-ppt": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/to/pptx"),
+
+  "word-to-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/from/doc"),
+  "excel-to-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/from/xlsx"),
+  "ppt-to-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/from/pptx"),
 
   "pdf-to-jpg": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/to/jpg"),
   "jpg-to-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/from/image"),
 
+  // 📂 تنظيم
   "merge-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/merge2"),
   "split-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/split"),
 
+  // ⚡ تحسين
   "compress-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/optimize"),
   "repair-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/repair"),
 
+  // 🔒 حماية
   "protect-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/security/add",{password:"123456"}),
   "unlock-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/security/remove"),
 
+  // ✏️ تعديل
   "rotate-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/rotate"),
   "delete-pages": (u)=>process(u,"https://api.pdf.co/v1/pdf/remove-pages"),
-
   "watermark": (u)=>process(u,"https://api.pdf.co/v1/pdf/edit/add",{text:"PDFORGE"}),
   "page-numbers": (u)=>process(u,"https://api.pdf.co/v1/pdf/edit/add"),
 
+  // 🧠 متقدم
   "ocr-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/to/searchable"),
   "extract-images": (u)=>process(u,"https://api.pdf.co/v1/pdf/extract/images"),
-
   "pdf-to-pdfa": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/to/pdfa")
 };
 
-// API واحد لكل الأدوات
+// ================= API واحد لكل الأدوات =================
 app.post("/api/:tool", upload.single("file"), async (req,res)=>{
   try{
     const fn = tools[req.params.tool];
@@ -115,14 +104,20 @@ app.post("/api/:tool", upload.single("file"), async (req,res)=>{
   }
 });
 
-// متابعة
+// ================= متابعة التحويل =================
 app.get("/api/check", async (req,res)=>{
   try{
     const r = await fetch(req.query.url);
-    res.json(await r.json());
+    const data = await r.json();
+    res.json(data);
   }catch(e){
     res.json({error:e.message});
   }
 });
 
-app.listen(3000,()=>console.log("🔥 PDFORGE MAX PRO LIVE"));
+// ================= تشغيل =================
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, ()=>{
+  console.log("🔥 PDFORGE MAX PRO LIVE");
+});
