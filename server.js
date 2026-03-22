@@ -3,8 +3,8 @@ const cors = require("cors");
 const multer = require("multer");
 const axios = require("axios");
 const fs = require("fs");
-const FormData = require("form-data");
 const path = require("path");
+const FormData = require("form-data");
 
 const app = express();
 app.use(cors());
@@ -13,151 +13,76 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const upload = multer({ dest: "uploads/" });
 
-// 🔑 APIs
-const CLOUD_API = process.env.CLOUDCONVERT_API_KEY;
-const CONVERT_API = process.env.CONVERT_API;
+// 🔑 Aspose
+const CLIENT_ID = process.env.ASPOSE_CLIENT_ID;
+const CLIENT_SECRET = process.env.ASPOSE_CLIENT_SECRET;
 
 // ==============================
-// ⚡ Queue
+// 🔐 Get Token
 // ==============================
-const queue = [];
-let processing = false;
+let cachedToken = null;
+let tokenExpire = 0;
 
-async function processQueue() {
-  if (processing || queue.length === 0) return;
+async function getToken() {
+  if (cachedToken && Date.now() < tokenExpire) return cachedToken;
 
-  processing = true;
-  const job = queue.shift();
+  const res = await axios.post(
+    "https://api.aspose.cloud/connect/token",
+    new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET
+    }),
+    { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+  );
 
-  try {
-    const result = await smartConvert(job.file, job.output);
-    job.resolve(result);
-  } catch (e) {
-    job.reject(e);
-  }
+  cachedToken = res.data.access_token;
+  tokenExpire = Date.now() + (res.data.expires_in - 60) * 1000;
 
-  processing = false;
-  processQueue();
-}
-
-function addToQueue(file, output) {
-  return new Promise((resolve, reject) => {
-    queue.push({ file, output, resolve, reject });
-    processQueue();
-  });
+  return cachedToken;
 }
 
 // ==============================
-// 🟩 ConvertAPI
+// 🧠 Convert via Aspose
 // ==============================
-async function convertConvertAPI(filePath, output, input) {
+async function convertAspose(filePath, output, ext) {
   try {
-    const form = new FormData();
-    form.append("File", fs.createReadStream(filePath));
+    const token = await getToken();
 
-    const res = await axios.post(
-      `https://v2.convertapi.com/convert/${input}/to/${output}?Secret=${CONVERT_API}`,
-      form,
-      { headers: form.getHeaders() }
-    );
+    // رفع الملف
+    const fileName = path.basename(filePath);
 
-    return { url: res.data?.Files?.[0]?.Url || null };
-
-  } catch (e) {
-    console.log("❌ ConvertAPI:", e.message);
-    return null;
-  }
-}
-
-// ==============================
-// 🟦 CloudConvert (FIXED 💀)
-// ==============================
-async function convertCloud(filePath, output, ext) {
-  try {
-    const job = await axios.post(
-      "https://api.cloudconvert.com/v2/jobs",
+    await axios.put(
+      `https://api.aspose.cloud/v3.0/storage/file/${fileName}`,
+      fs.createReadStream(filePath),
       {
-        tasks: {
-          upload: { operation: "import/upload" },
-          convert: {
-            operation: "convert",
-            input: "upload",
-            input_format: ext, // 🔥 أهم إصلاح
-            output_format: output
-          },
-          export: { operation: "export/url", input: "convert" }
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/octet-stream"
         }
-      },
-      { headers: { Authorization: `Bearer ${CLOUD_API}` } }
+      }
     );
 
-    const uploadTask = job.data.data.tasks.find(t => t.name === "upload");
-
-    const form = new FormData();
-    Object.entries(uploadTask.result.form).forEach(([k, v]) => form.append(k, v));
-    form.append("file", fs.createReadStream(filePath));
-
-    await axios.post(uploadTask.result.url, form, { headers: form.getHeaders() });
-
-    let url = null;
-
-    while (!url) {
-      const check = await axios.get(
-        `https://api.cloudconvert.com/v2/jobs/${job.data.data.id}`,
-        { headers: { Authorization: `Bearer ${CLOUD_API}` } }
-      );
-
-      const exp = check.data.data.tasks.find(t => t.name === "export");
-
-      if (exp && exp.status === "finished") {
-        url = exp.result.files[0].url;
+    // تحويل
+    const res = await axios.get(
+      `https://api.aspose.cloud/v3.0/pdf/convert/${ext}/to/${output}?srcPath=${fileName}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        responseType: "arraybuffer"
       }
+    );
 
-      await new Promise(r => setTimeout(r, 1500));
-    }
+    const outPath = "downloads/" + Date.now() + "." + output;
+    fs.writeFileSync(outPath, res.data);
 
-    return { url };
+    return { url: "/" + outPath };
 
   } catch (e) {
-    console.log("❌ CloudConvert:", e.message);
+    console.log("❌ Aspose:", e.message);
     return null;
   }
-}
-
-// ==============================
-// 🧠 Smart System
-// ==============================
-async function smartConvert(fileObj, output) {
-
-  const filePath = fileObj.path;
-  const ext = fileObj.ext;
-
-  console.log("📂", ext, "➡", output);
-
-  let result = null;
-
-  if (ext === "pdf") {
-    result = await convertConvertAPI(filePath, output, "pdf");
-    if (result?.url) return result;
-
-    return await convertCloud(filePath, output, ext);
-  }
-
-  if (["docx","xlsx","pptx"].includes(ext)) {
-    result = await convertCloud(filePath, output, ext);
-    if (result?.url) return result;
-
-    return await convertConvertAPI(filePath, output, ext);
-  }
-
-  if (["jpg","jpeg","png"].includes(ext)) {
-    result = await convertCloud(filePath, output, ext);
-    if (result?.url) return result;
-
-    return await convertConvertAPI(filePath, output, ext);
-  }
-
-  return await convertCloud(filePath, output, ext);
 }
 
 // ==============================
@@ -167,7 +92,7 @@ app.post("/convert", upload.single("file"), async (req, res) => {
 
   try {
     if (!req.file) {
-      return res.json({ error: true, message: "No file uploaded" });
+      return res.json({ error: true, message: "No file" });
     }
 
     const output = req.body.output || "pdf";
@@ -176,16 +101,11 @@ app.post("/convert", upload.single("file"), async (req, res) => {
       .replace(".", "")
       .toLowerCase();
 
-    const fileObj = {
-      path: req.file.path,
-      ext
-    };
-
-    const data = await addToQueue(fileObj, output);
+    const result = await convertAspose(req.file.path, output, ext);
 
     fs.unlink(req.file.path, () => {});
 
-    if (!data || !data.url) {
+    if (!result) {
       return res.json({
         error: true,
         message: "Conversion failed"
@@ -194,29 +114,23 @@ app.post("/convert", upload.single("file"), async (req, res) => {
 
     res.json({
       success: true,
-      url: data.url
+      url: result.url
     });
 
   } catch (e) {
-    res.json({
-      error: true,
-      message: e.message
-    });
+    res.json({ error: true, message: e.message });
   }
 });
 
+// ==============================
+// ❤️ Health
 // ==============================
 app.get("/health", (req, res) => {
   res.json({ status: "OK 🚀" });
 });
 
-app.get("/", (req, res) => {
-  res.send("🔥 PDFORGE ULTRA SERVER");
-});
-
 // ==============================
 const PORT = process.env.PORT || 8080;
-
 app.listen(PORT, "0.0.0.0", () => {
-  console.log("🔥 RUNNING " + PORT);
+  console.log("🔥 Aspose Server Running " + PORT);
 });
