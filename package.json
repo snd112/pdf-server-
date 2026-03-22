@@ -1,7 +1,7 @@
 {
-  "name": "pdf-professional-suite",
+  "name": "pdf-pro-suite",
   "version": "1.0.0",
-  "description": "50+ Professional PDF Conversion Tools",
+  "description": "60+ Professional PDF Conversion Tools",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
