@@ -7,14 +7,26 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const upload = multer({ dest: 'uploads/' });
+
+// Configure multer
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        const dir = './uploads';
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir);
+        cb(null, dir);
+    },
+    filename: function (req, file, cb) {
+        cb(null, Date.now() + '-' + file.originalname);
+    }
+});
+const upload = multer({ storage, limits: { fileSize: 100 * 1024 * 1024 } });
 
 // Middleware
-app.use(cors());
+app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'] }));
 app.use(express.json());
 app.use(express.static('public'));
 
-// API Key
+// PDF.co API Configuration
 const API_KEY = "a568hm8@gmail.com_odyW3q4nA6wA1XgMy6m5lMVDxZp39jaDDknjPVLQpN4dDDmN69yMk8HF7pIi5Rze";
 const PDF_CO_API = "https://api.pdf.co/v1";
 
@@ -39,7 +51,7 @@ async function callPdfCo(endpoint, filePath, extraParams = {}) {
     return response.data;
 }
 
-// Main endpoint for all tools
+// Universal endpoint for all conversions
 app.post('/api/:endpoint', upload.single('file'), async (req, res) => {
     try {
         const { endpoint } = req.params;
@@ -51,32 +63,35 @@ app.post('/api/:endpoint', upload.single('file'), async (req, res) => {
         
         let extraParams = {};
         
-        // Special parameters for specific endpoints
-        if (endpoint === 'pdf/convert/to/jpg' || endpoint === 'pdf/convert/to/png') {
-            extraParams.pages = req.body.pages || '1-10';
+        // Special parameters for specific conversions
+        if (endpoint.includes('jpg') || endpoint.includes('png') || endpoint.includes('tiff') || endpoint.includes('webp')) {
+            extraParams.pages = '1-50';
         }
         if (endpoint === 'pdf/compress') {
             extraParams.profile = 'web';
         }
         if (endpoint === 'pdf/split') {
-            extraParams.pages = req.body.pages || '1';
+            extraParams.pages = '1';
+        }
+        if (endpoint.includes('ocr')) {
+            extraParams.ocr = 'true';
+            extraParams.language = 'eng+ara';
         }
         
         const result = await callPdfCo(endpoint, file.path, extraParams);
         
-        // Clean up temp file
         try { fs.unlinkSync(file.path); } catch(e) {}
         
         res.json(result);
     } catch (error) {
-        console.error('API Error:', error.message);
+        console.error('Error:', error.message);
         try { if(req.file) fs.unlinkSync(req.file.path); } catch(e) {}
         res.status(500).json({ error: error.message });
     }
 });
 
 // Merge multiple files
-app.post('/api/pdf/merge', upload.array('files', 10), async (req, res) => {
+app.post('/api/pdf/merge', upload.array('files', 20), async (req, res) => {
     try {
         const files = req.files;
         if (!files || files.length === 0) {
@@ -104,31 +119,24 @@ app.post('/api/pdf/merge', upload.array('files', 10), async (req, res) => {
     }
 });
 
-// Health check endpoint
+// Health check
 app.get('/health', (req, res) => {
     res.json({ 
         status: 'OK', 
-        message: 'PDF Professional Suite is running',
+        message: 'PDF Professional Suite Running',
         timestamp: new Date().toISOString(),
-        tools: '100+',
-        api_ready: true
+        tools: '50+',
+        api_connected: true
     });
 });
 
-// Root endpoint
+// Root
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Create uploads directory if it doesn't exist
-if (!fs.existsSync('uploads')) {
-    fs.mkdirSync('uploads');
-}
-
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`✅ PDF Professional Suite Server Running`);
-    console.log(`📍 Port: ${PORT}`);
-    console.log(`📍 Health Check: http://localhost:${PORT}/health`);
-    console.log(`📍 API Ready: ${PDF_CO_API}`);
+    console.log(`✅ PDF Professional Suite Running on port ${PORT}`);
+    console.log(`📍 Health: http://localhost:${PORT}/health`);
 });
