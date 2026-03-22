@@ -8,25 +8,37 @@ const path = require('path');
 
 const app = express();
 
+// Create uploads directory
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir);
+}
+
 // Configure multer
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        const dir = './uploads';
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir);
-        cb(null, dir);
+        cb(null, uploadsDir);
     },
     filename: function (req, file, cb) {
         cb(null, Date.now() + '-' + file.originalname);
     }
 });
-const upload = multer({ storage, limits: { fileSize: 100 * 1024 * 1024 } });
+const upload = multer({ 
+    storage: storage, 
+    limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
+});
 
-// Middleware
-app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'] }));
+// Enable CORS for all routes
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
 app.use(express.static('public'));
 
-// PDF.co API Configuration
+// API Configuration
 const API_KEY = "a568hm8@gmail.com_odyW3q4nA6wA1XgMy6m5lMVDxZp39jaDDknjPVLQpN4dDDmN69yMk8HF7pIi5Rze";
 const PDF_CO_API = "https://api.pdf.co/v1";
 
@@ -51,19 +63,21 @@ async function callPdfCo(endpoint, filePath, extraParams = {}) {
     return response.data;
 }
 
-// Universal endpoint for all conversions
+// Main API endpoint
 app.post('/api/:endpoint', upload.single('file'), async (req, res) => {
+    let filePath = null;
     try {
         const { endpoint } = req.params;
-        const file = req.file;
         
-        if (!file) {
+        if (!req.file) {
             return res.status(400).json({ error: 'No file uploaded' });
         }
         
+        filePath = req.file.path;
+        
         let extraParams = {};
         
-        // Special parameters for specific conversions
+        // Special parameters for specific endpoints
         if (endpoint.includes('jpg') || endpoint.includes('png') || endpoint.includes('tiff') || endpoint.includes('webp')) {
             extraParams.pages = '1-50';
         }
@@ -73,25 +87,31 @@ app.post('/api/:endpoint', upload.single('file'), async (req, res) => {
         if (endpoint === 'pdf/split') {
             extraParams.pages = '1';
         }
-        if (endpoint.includes('ocr')) {
-            extraParams.ocr = 'true';
-            extraParams.language = 'eng+ara';
+        
+        const result = await callPdfCo(endpoint, filePath, extraParams);
+        
+        // Clean up
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
         }
         
-        const result = await callPdfCo(endpoint, file.path, extraParams);
-        
-        try { fs.unlinkSync(file.path); } catch(e) {}
-        
         res.json(result);
+        
     } catch (error) {
         console.error('Error:', error.message);
-        try { if(req.file) fs.unlinkSync(req.file.path); } catch(e) {}
-        res.status(500).json({ error: error.message });
+        
+        // Clean up
+        if (filePath && fs.existsSync(filePath)) {
+            try { fs.unlinkSync(filePath); } catch(e) {}
+        }
+        
+        res.status(500).json({ error: error.message || 'Conversion failed' });
     }
 });
 
 // Merge multiple files
 app.post('/api/pdf/merge', upload.array('files', 20), async (req, res) => {
+    const filePaths = [];
     try {
         const files = req.files;
         if (!files || files.length === 0) {
@@ -100,6 +120,7 @@ app.post('/api/pdf/merge', upload.array('files', 20), async (req, res) => {
         
         const formData = new FormData();
         files.forEach(file => {
+            filePaths.push(file.path);
             formData.append('files', fs.createReadStream(file.path));
         });
         formData.append('apikey', API_KEY);
@@ -111,10 +132,18 @@ app.post('/api/pdf/merge', upload.array('files', 20), async (req, res) => {
             maxBodyLength: Infinity
         });
         
-        files.forEach(file => { try { fs.unlinkSync(file.path); } catch(e) {} });
+        // Clean up
+        filePaths.forEach(filePath => {
+            if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        });
         
         res.json(response.data);
+        
     } catch (error) {
+        // Clean up
+        filePaths.forEach(filePath => {
+            if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        });
         res.status(500).json({ error: error.message });
     }
 });
@@ -123,20 +152,20 @@ app.post('/api/pdf/merge', upload.array('files', 20), async (req, res) => {
 app.get('/health', (req, res) => {
     res.json({ 
         status: 'OK', 
-        message: 'PDF Professional Suite Running',
+        message: 'PDF Professional Suite is running',
         timestamp: new Date().toISOString(),
-        tools: '50+',
-        api_connected: true
+        tools: '50+'
     });
 });
 
-// Root
+// Root endpoint
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`✅ PDF Professional Suite Running on port ${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`✅ PDF Professional Suite Server Running`);
+    console.log(`📍 Port: ${PORT}`);
     console.log(`📍 Health: http://localhost:${PORT}/health`);
 });
