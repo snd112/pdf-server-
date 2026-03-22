@@ -17,17 +17,32 @@ const upload = multer({ dest: "uploads/" });
 const CLOUD_API = process.env.CLOUDCONVERT_API_KEY;
 const CONVERT_API = process.env.CONVERT_API;
 
-// 🧠 usage
-let usage = {
-  cloud: 0,
-  convert: 0
-};
+// ==============================
+// 🧠 Free Limit System
+// ==============================
+const users = {};
+const FREE_LIMIT = 3;
 
-// 🧠 cache
-const cache = new Map();
+function getIP(req) {
+  return req.headers["x-forwarded-for"] || req.socket.remoteAddress;
+}
+
+function checkLimit(req, res) {
+  const ip = getIP(req);
+
+  if (!users[ip]) users[ip] = { count: 0 };
+
+  if (users[ip].count >= FREE_LIMIT) {
+    res.status(403).json({ error: true, message: "LIMIT" });
+    return false;
+  }
+
+  users[ip].count++;
+  return true;
+}
 
 // ==============================
-// ⚡ Queue System
+// ⚡ Queue
 // ==============================
 const queue = [];
 let processing = false;
@@ -57,17 +72,18 @@ function addToQueue(file, output) {
 }
 
 // ==============================
-// 🟦 CloudConvert
+// 🟦 CloudConvert (FIXED)
 // ==============================
 async function convertCloud(filePath, output) {
-  const res = await axios.post(
+
+  const job = await axios.post(
     "https://api.cloudconvert.com/v2/jobs",
     {
       tasks: {
-        import: { operation: "import/upload" },
+        upload: { operation: "import/upload" },
         convert: {
           operation: "convert",
-          input: "import",
+          input: "upload",
           output_format: output
         },
         export: { operation: "export/url", input: "convert" }
@@ -80,14 +96,48 @@ async function convertCloud(filePath, output) {
     }
   );
 
-  usage.cloud++;
-  return res.data;
+  const uploadTask = job.data.data.tasks.find(t => t.name === "upload");
+
+  const form = new FormData();
+  Object.entries(uploadTask.result.form).forEach(([k, v]) => {
+    form.append(k, v);
+  });
+  form.append("file", fs.createReadStream(filePath));
+
+  await axios.post(uploadTask.result.url, form, {
+    headers: form.getHeaders()
+  });
+
+  // wait result
+  let fileUrl = null;
+
+  while (!fileUrl) {
+    const check = await axios.get(
+      `https://api.cloudconvert.com/v2/jobs/${job.data.data.id}`,
+      {
+        headers: {
+          Authorization: `Bearer ${CLOUD_API}`
+        }
+      }
+    );
+
+    const exportTask = check.data.data.tasks.find(t => t.name === "export");
+
+    if (exportTask && exportTask.status === "finished") {
+      fileUrl = exportTask.result.files[0].url;
+    }
+
+    await new Promise(r => setTimeout(r, 2000));
+  }
+
+  return { url: fileUrl };
 }
 
 // ==============================
 // 🟩 ConvertAPI
 // ==============================
 async function convertConvertAPI(filePath, output) {
+
   const form = new FormData();
   form.append("File", fs.createReadStream(filePath));
 
@@ -97,8 +147,9 @@ async function convertConvertAPI(filePath, output) {
     { headers: form.getHeaders() }
   );
 
-  usage.convert++;
-  return res.data;
+  return {
+    url: res.data.Files[0].Url
+  };
 }
 
 // ==============================
@@ -106,32 +157,9 @@ async function convertConvertAPI(filePath, output) {
 // ==============================
 async function smartConvert(filePath, output) {
 
-  // 🎯 اختيار حسب النوع
-  if (["docx", "xlsx", "pptx"].includes(output)) {
-    try {
-      console.log("⚡ CloudConvert (Office)");
-      return await convertCloud(filePath, output);
-    } catch {
-      return await convertConvertAPI(filePath, output);
-    }
-  }
-
-  // 🖼 الصور
-  if (["jpg", "png"].includes(output)) {
-    try {
-      console.log("⚡ ConvertAPI (Images)");
-      return await convertConvertAPI(filePath, output);
-    } catch {
-      return await convertCloud(filePath, output);
-    }
-  }
-
-  // 🔄 fallback عام
   try {
-    console.log("⚡ Default CloudConvert");
     return await convertCloud(filePath, output);
   } catch {
-    console.log("🔁 fallback ConvertAPI");
     return await convertConvertAPI(filePath, output);
   }
 }
@@ -140,60 +168,31 @@ async function smartConvert(filePath, output) {
 // 🚀 Convert Endpoint
 // ==============================
 app.post("/convert", upload.single("file"), async (req, res) => {
+
+  if (!checkLimit(req, res)) return;
+
   try {
-    if (!req.file) return res.status(400).json({ error: "No file" });
-
     const output = req.body.output || "pdf";
-    const key = req.file.originalname + "_" + output;
 
-    // 💾 Cache
-    if (cache.has(key)) {
-      return res.json({ cached: true, data: cache.get(key) });
-    }
-
-    // ⚡ Queue
     const data = await addToQueue(req.file.path, output);
-
-    cache.set(key, data);
 
     fs.unlink(req.file.path, () => {});
 
     res.json({
       success: true,
-      output,
-      usage
+      url: data.url
     });
 
   } catch (e) {
-    res.status(500).json({
-      error: true,
-      message: e.message
-    });
+    res.status(500).json({ error: true });
   }
 });
-
-// ==============================
-// 🎯 Tools
-// ==============================
-function tool(route, format) {
-  app.post(route, upload.single("file"), (req, res, next) => {
-    req.body.output = format;
-    app._router.handle(req, res, next, "post", "/convert");
-  });
-}
-
-tool("/pdf-to-word", "docx");
-tool("/pdf-to-excel", "xlsx");
-tool("/pdf-to-ppt", "pptx");
-tool("/pdf-to-jpg", "jpg");
-tool("/word-to-pdf", "pdf");
-tool("/excel-to-pdf", "pdf");
 
 // ==============================
 // ❤️ Health
 // ==============================
 app.get("/health", (req, res) => {
-  res.json({ status: "OK 🚀", usage });
+  res.json({ status: "OK 🚀" });
 });
 
 // ==============================
@@ -202,5 +201,5 @@ app.get("/health", (req, res) => {
 const PORT = process.env.PORT || 8080;
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log("🔥 NUCLEAR SERVER RUNNING " + PORT);
+  console.log("🔥 SERVER RUNNING " + PORT);
 });
