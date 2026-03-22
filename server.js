@@ -1,159 +1,171 @@
 const express = require('express');
-const cors = require('cors');
 const multer = require('multer');
 const axios = require('axios');
 const FormData = require('form-data');
 const fs = require('fs');
-const path = require('path');
 
 const app = express();
+const upload = multer({ dest: 'uploads/' });
 
-// 📁 uploads
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
+const CONVERT_API = process.env.CONVERT_API;
+const CLOUD_API = process.env.CLOUD_API;
 
-// 📤 multer
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, uploadsDir),
-    filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
-});
-const upload = multer({ storage });
-
-// ⚙️ middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.static('public'));
-
-// 🔑 API
-const API_KEY = "a568hm8@gmail.com_odyW3q4nA6wA1XgMy6m5lMVDxZp39jaDDknjPVLQpN4dDDmN69yMk8HF7pIi5Rze";
-const BASE = "https://api.pdf.co/v1";
-
-// ================= رفع الملف =================
-async function uploadFile(filePath){
-    const formData = new FormData();
-    formData.append('file', fs.createReadStream(filePath));
-
-    const res = await axios.post(`${BASE}/file/upload`, formData, {
-        headers:{
-            ...formData.getHeaders(),
-            "x-api-key": API_KEY
-        }
-    });
-
-    if(!res.data.url) throw new Error("Upload failed");
-
-    return res.data.url;
+// ================= SPEED LOGGER =================
+function log(tool, api){
+    console.log(`⚡ ${tool} via ${api}`);
 }
 
-// ================= تنفيذ =================
-async function run(endpoint, body){
-    const res = await axios.post(`${BASE}/${endpoint}`, body, {
-        headers:{
-            "x-api-key": API_KEY
-        },
-        timeout:120000
-    });
+// ================= ConvertAPI =================
+async function convertAPI(filePath, from, to){
+    const form = new FormData();
+    form.append("File", fs.createReadStream(filePath));
+    form.append("Secret", CONVERT_API);
+
+    const res = await axios.post(
+        `https://v2.convertapi.com/convert/${from}/to/${to}`,
+        form,
+        { headers: form.getHeaders(), timeout: 60000 }
+    );
 
     return res.data;
 }
 
-// ================= الأدوات =================
-const tools = {
+// ================= CloudConvert =================
+async function cloudConvert(filePath, input, output){
 
-    // 🔥 تحويلات قوية
-    "pdf-to-word": u => run("pdf/convert/to/docx", { url:u }),
-    "pdf-to-excel": u => run("pdf/convert/to/xlsx", { url:u }),
-    "pdf-to-ppt": u => run("pdf/convert/to/pptx", { url:u }),
+    const job = await axios.post(
+        "https://api.cloudconvert.com/v2/jobs",
+        {
+            tasks:{
+                upload:{ operation:"import/upload" },
+                convert:{
+                    operation:"convert",
+                    input:"upload",
+                    input_format:input,
+                    output_format:output
+                },
+                export:{
+                    operation:"export/url",
+                    input:"convert"
+                }
+            }
+        },
+        { headers:{ Authorization:`Bearer ${CLOUD_API}` } }
+    );
 
-    "word-to-pdf": u => run("pdf/convert/from/doc", { url:u }),
-    "excel-to-pdf": u => run("pdf/convert/from/xls", { url:u }),
-    "ppt-to-pdf": u => run("pdf/convert/from/ppt", { url:u }),
+    const uploadTask = job.data.data.tasks.find(t=>t.name==="upload");
 
-    "pdf-to-jpg": u => run("pdf/convert/to/jpg", { url:u, pages:"0-" }),
-    "pdf-to-png": u => run("pdf/convert/to/png", { url:u }),
-    "jpg-to-pdf": u => run("pdf/convert/from/image", { url:u }),
+    const form = new FormData();
+    Object.entries(uploadTask.result.form).forEach(([k,v])=>{
+        form.append(k,v);
+    });
+    form.append("file", fs.createReadStream(filePath));
 
-    "pdf-to-text": u => run("pdf/convert/to/text", { url:u }),
+    await axios.post(uploadTask.result.form.url, form, {
+        headers: form.getHeaders()
+    });
 
-    // 📂 إدارة
-    "merge-pdf": u => run("pdf/merge2", { url:u }),
-    "split-pdf": u => run("pdf/split", { url:u }),
+    let result;
 
-    // ⚡ تحسين
-    "compress-pdf": u => run("pdf/optimize", { url:u, profile:"web" }),
+    while(true){
+        const check = await axios.get(
+            `https://api.cloudconvert.com/v2/jobs/${job.data.data.id}`,
+            { headers:{ Authorization:`Bearer ${CLOUD_API}` } }
+        );
 
-    // ✏️ تعديل
-    "watermark": u => run("pdf/edit/add", { url:u, text:"PDFORGE" }),
-    "rotate-pdf": u => run("pdf/rotate", { url:u }),
+        if(check.data.data.status === "finished"){
+            result = check.data.data.tasks.find(t=>t.name==="export");
+            break;
+        }
 
-    // 🔒 حماية
-    "protect-pdf": u => run("pdf/security/add", { url:u, password:"123456" }),
-    "unlock-pdf": u => run("pdf/security/remove", { url:u }),
+        await new Promise(r=>setTimeout(r,1500)); // أسرع polling
+    }
 
-    // 🧠 OCR
-    "ocr": u => run("pdf/convert/to/searchable", { url:u }),
+    return result.result.files;
+}
 
-    // 📊 استخراج
-    "extract-images": u => run("pdf/extract/images", { url:u }),
-    "pdf-info": u => run("pdf/info", { url:u }),
-};
+// ================= SMART ENGINE =================
+async function smart(filePath, tool){
+
+    try{
+
+        // 🔥 أسرع تحويلات (ConvertAPI)
+        if(tool === "pdf-to-word"){
+            log(tool,"ConvertAPI");
+            return await convertAPI(filePath,"pdf","docx");
+        }
+
+        if(tool === "pdf-to-excel"){
+            log(tool,"ConvertAPI");
+            return await convertAPI(filePath,"pdf","xlsx");
+        }
+
+        if(tool === "pdf-to-jpg"){
+            log(tool,"ConvertAPI");
+            return await convertAPI(filePath,"pdf","jpg");
+        }
+
+        if(tool === "jpg-to-pdf"){
+            log(tool,"ConvertAPI");
+            return await convertAPI(filePath,"jpg","pdf");
+        }
+
+        // 💀 تقيل → CloudConvert
+        if(tool === "pdf-to-ppt"){
+            log(tool,"CloudConvert");
+            return await cloudConvert(filePath,"pdf","pptx");
+        }
+
+        // fallback
+        log(tool,"Fallback ConvertAPI");
+        return await convertAPI(filePath,"pdf","txt");
+
+    }catch(e){
+
+        console.log("💥 Fallback triggered");
+
+        // fallback حقيقي
+        if(tool === "pdf-to-word"){
+            return await cloudConvert(filePath,"pdf","docx");
+        }
+
+        throw e;
+    }
+}
 
 // ================= API =================
-app.post('/api/:tool', upload.single('file'), async (req, res) => {
+app.post("/api/:tool", upload.single("file"), async (req,res)=>{
+
     let filePath;
 
-    try {
-        const tool = req.params.tool;
-
-        if (!req.file){
-            return res.status(400).json({ error: "❌ No file" });
-        }
+    try{
+        if(!req.file) return res.json({error:"❌ No file"});
 
         filePath = req.file.path;
 
-        let fn = tools[tool];
-
-        // 💀 fallback
-        if(!fn){
-            console.log("Unknown tool:", tool);
-            fn = tools["pdf-to-jpg"];
-        }
-
-        // 🔥 رفع
-        const fileUrl = await uploadFile(filePath);
-
-        // 🔥 تنفيذ
-        const result = await fn(fileUrl);
+        const result = await smart(filePath, req.params.tool);
 
         fs.unlinkSync(filePath);
 
         res.json(result);
 
-    } catch (err) {
+    }catch(e){
 
-        if (filePath && fs.existsSync(filePath)){
+        if(filePath && fs.existsSync(filePath)){
             fs.unlinkSync(filePath);
         }
 
-        res.status(500).json({
-            error: true,
-            message: err.response?.data || err.message
-        });
+        res.json({error:true,message:e.message});
     }
 });
 
-// ================= health =================
-app.get('/health', (req, res) => {
-    res.json({ status: 'OK 🚀 PDF PRO MAX' });
+// ================= HEALTH =================
+app.get("/health",(req,res)=>{
+    res.json({
+        status:"🔥 ULTRA SERVER",
+        speed:"MAX",
+        apis:"ConvertAPI + CloudConvert"
+    });
 });
 
-// ================= root =================
-app.get('/', (req, res) => {
-    res.send("🔥 PDF SERVER LIVE");
-});
-
-// ================= تشغيل =================
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log("🔥 SERVER RUNNING ON " + PORT);
-});
+app.listen(3000,()=>console.log("💀 ULTRA SERVER RUNNING"));
