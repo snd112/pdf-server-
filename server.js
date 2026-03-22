@@ -13,7 +13,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const upload = multer({ dest: "uploads/" });
 
-// 🔑 APIs
+// 🔑 APIs من Railway Variables
 const CLOUD_API = process.env.CLOUDCONVERT_API_KEY;
 const CONVERT_API = process.env.CONVERT_API;
 
@@ -48,7 +48,31 @@ function addToQueue(file, output) {
 }
 
 // ==============================
-// 🟦 CloudConvert (FIXED)
+// 🟩 ConvertAPI
+// ==============================
+async function convertConvertAPI(filePath, output, inputFormat) {
+  try {
+    const form = new FormData();
+    form.append("File", fs.createReadStream(filePath));
+
+    const res = await axios.post(
+      `https://v2.convertapi.com/convert/${inputFormat}/to/${output}?Secret=${CONVERT_API}`,
+      form,
+      { headers: form.getHeaders() }
+    );
+
+    return {
+      url: res.data?.Files?.[0]?.Url || null
+    };
+
+  } catch (e) {
+    console.log("❌ ConvertAPI Error");
+    return null;
+  }
+}
+
+// ==============================
+// 🟦 CloudConvert
 // ==============================
 async function convertCloud(filePath, output) {
   try {
@@ -108,31 +132,7 @@ async function convertCloud(filePath, output) {
     return { url: fileUrl };
 
   } catch (e) {
-    console.log("CloudConvert Failed → fallback");
-    return null;
-  }
-}
-
-// ==============================
-// 🟩 ConvertAPI (SAFE)
-// ==============================
-async function convertConvertAPI(filePath, output) {
-  try {
-    const form = new FormData();
-    form.append("File", fs.createReadStream(filePath));
-
-    const res = await axios.post(
-      `https://v2.convertapi.com/convert/pdf/to/${output}?Secret=${CONVERT_API}`,
-      form,
-      { headers: form.getHeaders() }
-    );
-
-    return {
-      url: res.data?.Files?.[0]?.Url || null
-    };
-
-  } catch (e) {
-    console.log("ConvertAPI Failed");
+    console.log("❌ CloudConvert Error");
     return null;
   }
 }
@@ -142,23 +142,41 @@ async function convertConvertAPI(filePath, output) {
 // ==============================
 async function smartConvert(filePath, output) {
 
-  let result = await convertCloud(filePath, output);
+  const ext = path.extname(filePath).replace(".", "").toLowerCase();
 
-  if (!result || !result.url) {
-    result = await convertConvertAPI(filePath, output);
+  console.log("📂", ext, "➡", output);
+
+  // PDF
+  if (ext === "pdf") {
+    let r = await convertConvertAPI(filePath, output, "pdf");
+    if (r && r.url) return r;
+    return await convertCloud(filePath, output);
   }
 
-  return result;
+  // Office
+  if (["docx","xlsx","pptx"].includes(ext)) {
+    let r = await convertCloud(filePath, output);
+    if (r && r.url) return r;
+    return await convertConvertAPI(filePath, output, ext);
+  }
+
+  // Images
+  if (["jpg","jpeg","png"].includes(ext)) {
+    let r = await convertCloud(filePath, output);
+    if (r && r.url) return r;
+    return await convertConvertAPI(filePath, output, ext);
+  }
+
+  return await convertCloud(filePath, output);
 }
 
 // ==============================
-// 🚀 Convert Endpoint
+// 🚀 Endpoint
 // ==============================
 app.post("/convert", upload.single("file"), async (req, res) => {
-
   try {
     if (!req.file) {
-      return res.status(400).json({ error: true, message: "No file uploaded" });
+      return res.status(400).json({ error: true });
     }
 
     const output = req.body.output || "pdf";
@@ -199,10 +217,7 @@ app.get("/health", (req, res) => {
 });
 
 // ==============================
-// ⚡ Start
-// ==============================
 const PORT = process.env.PORT || 8080;
-
 app.listen(PORT, "0.0.0.0", () => {
-  console.log("🔥 SERVER RUNNING ON " + PORT);
+  console.log("🔥 RUNNING " + PORT);
 });
