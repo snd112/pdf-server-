@@ -9,6 +9,7 @@ const path = require('path');
 const app = express();
 const upload = multer({ dest: 'uploads/' });
 
+// Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
@@ -38,7 +39,7 @@ async function callPdfCo(endpoint, filePath, extraParams = {}) {
     return response.data;
 }
 
-// Main API endpoint for all tools
+// Main endpoint for all tools
 app.post('/api/:endpoint', upload.single('file'), async (req, res) => {
     try {
         const { endpoint } = req.params;
@@ -50,7 +51,7 @@ app.post('/api/:endpoint', upload.single('file'), async (req, res) => {
         
         let extraParams = {};
         
-        // Add special parameters for specific endpoints
+        // Special parameters for specific endpoints
         if (endpoint === 'pdf/convert/to/jpg' || endpoint === 'pdf/convert/to/png') {
             extraParams.pages = req.body.pages || '1-10';
         }
@@ -68,7 +69,7 @@ app.post('/api/:endpoint', upload.single('file'), async (req, res) => {
         
         res.json(result);
     } catch (error) {
-        console.error('Error:', error.message);
+        console.error('API Error:', error.message);
         try { if(req.file) fs.unlinkSync(req.file.path); } catch(e) {}
         res.status(500).json({ error: error.message });
     }
@@ -103,42 +104,31 @@ app.post('/api/pdf/merge', upload.array('files', 10), async (req, res) => {
     }
 });
 
-// OCR endpoint
-app.post('/api/pdf/ocr', upload.single('file'), async (req, res) => {
-    try {
-        const file = req.file;
-        if (!file) return res.status(400).json({ error: 'No file uploaded' });
-        
-        const formData = new FormData();
-        formData.append('file', fs.createReadStream(file.path));
-        formData.append('apikey', API_KEY);
-        formData.append('async', 'false');
-        formData.append('ocr', 'true');
-        formData.append('language', 'eng+ara');
-        
-        const response = await axios.post(`${PDF_CO_API}/pdf/convert/to/searchable`, formData, {
-            headers: formData.getHeaders()
-        });
-        
-        try { fs.unlinkSync(file.path); } catch(e) {}
-        res.json(response.data);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Health check
+// Health check endpoint
 app.get('/health', (req, res) => {
-    res.json({ status: 'OK', timestamp: new Date().toISOString(), tools: '100+' });
+    res.json({ 
+        status: 'OK', 
+        message: 'PDF Professional Suite is running',
+        timestamp: new Date().toISOString(),
+        tools: '100+',
+        api_ready: true
+    });
 });
 
-// Serve frontend
+// Root endpoint
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// Create uploads directory if it doesn't exist
+if (!fs.existsSync('uploads')) {
+    fs.mkdirSync('uploads');
+}
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`✅ PDF Server running on port ${PORT}`);
-    console.log(`📍 Tools available: 100+`);
+    console.log(`✅ PDF Professional Suite Server Running`);
+    console.log(`📍 Port: ${PORT}`);
+    console.log(`📍 Health Check: http://localhost:${PORT}/health`);
+    console.log(`📍 API Ready: ${PDF_CO_API}`);
 });
