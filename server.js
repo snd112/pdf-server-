@@ -3,145 +3,96 @@ const multer = require("multer");
 const fetch = require("node-fetch");
 const cors = require("cors");
 const FormData = require("form-data");
-const path = require("path");
 
 const app = express();
-
-// ================= إعدادات =================
 app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-// مهم عشان Railway
-const PORT = process.env.PORT || 3000;
-
-// رفع الملفات
 const upload = multer();
 
-// 🔑 حط الـ API KEY بتاعك هنا
+// 🔑 API KEY
 const API_KEY = "a568hm8@gmail.com_odyW3q4nA6wA1XgMy6m5lMVDxZp39jaDDknjPVLQpN4dDDmN69yMk8HF7pIi5Rze";
 
-// ================= الصفحة الرئيسية =================
-app.get("/", (req, res) => {
-  res.json({
-    status: "running",
-    message: "🔥 PDF SERVER WORKING",
-    endpoints: [
-      "/api/pdf-to-word",
-      "/api/pdf-to-excel",
-      "/api/pdf-to-ppt",
-      "/api/pdf-to-jpg",
-      "/api/jpg-to-pdf",
-      "/api/merge-pdf",
-      "/api/split-pdf",
-      "/api/compress-pdf"
-    ]
-  });
-});
-
-// ================= رفع الملف =================
-async function uploadFile(file) {
+// ===== رفع =====
+async function uploadFile(file){
   const form = new FormData();
   form.append("file", file.buffer, file.originalname);
 
-  const response = await fetch("https://api.pdf.co/v1/file/upload", {
-    method: "POST",
-    headers: { "x-api-key": API_KEY },
-    body: form
+  const r = await fetch("https://api.pdf.co/v1/file/upload",{
+    method:"POST",
+    headers:{ "x-api-key": API_KEY },
+    body:form
   });
 
-  const data = await response.json();
-
-  if (!data.url) {
-    throw new Error(JSON.stringify(data));
-  }
+  const data = await r.json();
+  if(!data.url) throw new Error(JSON.stringify(data));
 
   return data.url;
 }
 
-// ================= تنفيذ العملية =================
-async function processFile(url, endpoint, extra = {}) {
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
+// ===== تنفيذ =====
+async function run(endpoint, url, extra = {}){
+  const r = await fetch(endpoint,{
+    method:"POST",
+    headers:{
       "x-api-key": API_KEY,
-      "Content-Type": "application/json"
+      "Content-Type":"application/json"
     },
-    body: JSON.stringify({
-      url,
-      async: false,
-      ...extra
-    })
+    body: JSON.stringify({ url, ...extra })
   });
 
-  const data = await response.json();
-
-  if (data.error) {
-    throw new Error(data.message);
-  }
-
-  return data;
+  return await r.json();
 }
 
-// ================= الأدوات =================
+// ===== الأدوات =====
 const tools = {
-  "pdf-to-word": (u) =>
-    processFile(u, "https://api.pdf.co/v1/pdf/convert/to/docx"),
 
-  "pdf-to-excel": (u) =>
-    processFile(u, "https://api.pdf.co/v1/pdf/convert/to/xlsx"),
+  // 🔥 تحويل
+  "pdf-to-jpg": u => run("https://api.pdf.co/v1/pdf/convert/to/jpg", u, {pages:"0-"}),
+  "jpg-to-pdf": u => run("https://api.pdf.co/v1/pdf/convert/from/image", u),
+  "pdf-to-text": u => run("https://api.pdf.co/v1/pdf/convert/to/text", u),
+  "pdf-to-json": u => run("https://api.pdf.co/v1/pdf/convert/to/json", u),
 
-  "pdf-to-ppt": (u) =>
-    processFile(u, "https://api.pdf.co/v1/pdf/convert/to/pptx"),
+  // 📂 تنظيم
+  "merge-pdf": u => run("https://api.pdf.co/v1/pdf/merge2", u),
+  "split-pdf": u => run("https://api.pdf.co/v1/pdf/split", u),
+  "delete-pages": u => run("https://api.pdf.co/v1/pdf/remove-pages", u),
 
-  "pdf-to-jpg": (u) =>
-    processFile(u, "https://api.pdf.co/v1/pdf/convert/to/jpg", {
-      pages: "0-"
-    }),
+  // ⚡ تحسين
+  "compress-pdf": u => run("https://api.pdf.co/v1/pdf/optimize", u),
 
-  "jpg-to-pdf": (u) =>
-    processFile(u, "https://api.pdf.co/v1/pdf/convert/from/image"),
+  // ✏️ تعديل
+  "watermark": u => run("https://api.pdf.co/v1/pdf/edit/add", u, {text:"PDFORGE"}),
+  "rotate-pdf": u => run("https://api.pdf.co/v1/pdf/rotate", u),
 
-  "merge-pdf": (u) =>
-    processFile(u, "https://api.pdf.co/v1/pdf/merge2"),
+  // 🔒 حماية
+  "protect-pdf": u => run("https://api.pdf.co/v1/pdf/security/add", u, {password:"123456"}),
+  "unlock-pdf": u => run("https://api.pdf.co/v1/pdf/security/remove", u),
 
-  "split-pdf": (u) =>
-    processFile(u, "https://api.pdf.co/v1/pdf/split"),
+  // 🧠 OCR
+  "ocr-pdf": u => run("https://api.pdf.co/v1/pdf/convert/to/searchable", u),
+  "extract-images": u => run("https://api.pdf.co/v1/pdf/extract/images", u)
 
-  "compress-pdf": (u) =>
-    processFile(u, "https://api.pdf.co/v1/pdf/optimize")
 };
 
-// ================= API =================
-app.post("/api/:tool", upload.single("file"), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.json({ error: "❌ لازم ترفع ملف" });
-    }
+// ===== API =====
+app.post("/api/:tool", upload.single("file"), async (req,res)=>{
+  try{
 
-    const tool = tools[req.params.tool];
+    if(!req.file) return res.json({error:"❌ ارفع ملف"});
 
-    if (!tool) {
-      return res.json({ error: "❌ الأداة مش موجودة" });
-    }
+    const fn = tools[req.params.tool];
+    if(!fn) return res.json({error:"❌ الأداة مش موجودة"});
 
-    // رفع الملف
     const fileUrl = await uploadFile(req.file);
-
-    // تنفيذ العملية
-    const result = await tool(fileUrl);
+    const result = await fn(fileUrl);
 
     res.json(result);
-  } catch (err) {
-    console.error(err);
-    res.json({
-      error: true,
-      message: err.message
-    });
+
+  }catch(e){
+    res.json({error:true,message:e.message});
   }
 });
 
-// ================= تشغيل السيرفر =================
-app.listen(PORT, () => {
-  console.log(`🔥 Server running on port ${PORT}`);
-});
+// ===== تشغيل =====
+app.listen(process.env.PORT || 3000, ()=>console.log("🔥 NUCLEAR SERVER"));
