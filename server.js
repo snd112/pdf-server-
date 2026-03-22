@@ -28,124 +28,132 @@ app.use(express.static('public'));
 const API_KEY = "a568hm8@gmail.com_odyW3q4nA6wA1XgMy6m5lMVDxZp39jaDDknjPVLQpN4dDDmN69yMk8HF7pIi5Rze";
 const BASE = "https://api.pdf.co/v1";
 
-// 🔥 mapping الأدوات
-const tools = {
-    "pdf-to-jpg": "pdf/convert/to/jpg",
-    "pdf-to-png": "pdf/convert/to/png",
-    "pdf-to-text": "pdf/convert/to/text",
-    "pdf-to-json": "pdf/convert/to/json",
-    "pdf-to-html": "pdf/convert/to/html",
-    "pdf-to-csv": "pdf/convert/to/csv",
-    "pdf-to-xml": "pdf/convert/to/xml",
-    "pdf-to-pdfa": "pdf/convert/to/pdfa",
-    "pdf-to-searchable": "pdf/convert/to/searchable",
-
-    "jpg-to-pdf": "pdf/convert/from/image",
-    "html-to-pdf": "pdf/convert/from/html",
-
-    "merge-pdf": "pdf/merge2",
-    "split-pdf": "pdf/split",
-    "delete-pages": "pdf/remove-pages",
-
-    "compress-pdf": "pdf/optimize",
-
-    "rotate-pdf": "pdf/rotate",
-    "watermark": "pdf/edit/add",
-
-    "protect-pdf": "pdf/security/add",
-    "unlock-pdf": "pdf/security/remove",
-
-    "extract-images": "pdf/extract/images",
-    "pdf-info": "pdf/info"
-};
-
-// 🚀 تنفيذ
-async function callPdfCo(endpoint, filePath, extra = {}) {
+// ================= رفع الملف =================
+async function uploadFile(filePath){
     const formData = new FormData();
     formData.append('file', fs.createReadStream(filePath));
 
-    for (const [k, v] of Object.entries(extra)) {
-        formData.append(k, v);
-    }
-
-    const res = await axios.post(`${BASE}/${endpoint}`, formData, {
-        headers: {
+    const res = await axios.post(`${BASE}/file/upload`, formData, {
+        headers:{
             ...formData.getHeaders(),
             "x-api-key": API_KEY
+        }
+    });
+
+    if(!res.data.url) throw new Error("Upload failed");
+
+    return res.data.url;
+}
+
+// ================= تنفيذ =================
+async function run(endpoint, body){
+    const res = await axios.post(`${BASE}/${endpoint}`, body, {
+        headers:{
+            "x-api-key": API_KEY
         },
-        timeout: 120000
+        timeout:120000
     });
 
     return res.data;
 }
 
-// 🔥 API
+// ================= الأدوات =================
+const tools = {
+
+    // 🔥 تحويلات قوية
+    "pdf-to-word": u => run("pdf/convert/to/docx", { url:u }),
+    "pdf-to-excel": u => run("pdf/convert/to/xlsx", { url:u }),
+    "pdf-to-ppt": u => run("pdf/convert/to/pptx", { url:u }),
+
+    "word-to-pdf": u => run("pdf/convert/from/doc", { url:u }),
+    "excel-to-pdf": u => run("pdf/convert/from/xls", { url:u }),
+    "ppt-to-pdf": u => run("pdf/convert/from/ppt", { url:u }),
+
+    "pdf-to-jpg": u => run("pdf/convert/to/jpg", { url:u, pages:"0-" }),
+    "pdf-to-png": u => run("pdf/convert/to/png", { url:u }),
+    "jpg-to-pdf": u => run("pdf/convert/from/image", { url:u }),
+
+    "pdf-to-text": u => run("pdf/convert/to/text", { url:u }),
+
+    // 📂 إدارة
+    "merge-pdf": u => run("pdf/merge2", { url:u }),
+    "split-pdf": u => run("pdf/split", { url:u }),
+
+    // ⚡ تحسين
+    "compress-pdf": u => run("pdf/optimize", { url:u, profile:"web" }),
+
+    // ✏️ تعديل
+    "watermark": u => run("pdf/edit/add", { url:u, text:"PDFORGE" }),
+    "rotate-pdf": u => run("pdf/rotate", { url:u }),
+
+    // 🔒 حماية
+    "protect-pdf": u => run("pdf/security/add", { url:u, password:"123456" }),
+    "unlock-pdf": u => run("pdf/security/remove", { url:u }),
+
+    // 🧠 OCR
+    "ocr": u => run("pdf/convert/to/searchable", { url:u }),
+
+    // 📊 استخراج
+    "extract-images": u => run("pdf/extract/images", { url:u }),
+    "pdf-info": u => run("pdf/info", { url:u }),
+};
+
+// ================= API =================
 app.post('/api/:tool', upload.single('file'), async (req, res) => {
     let filePath;
 
     try {
         const tool = req.params.tool;
 
-        if (!req.file) {
-            return res.status(400).json({ error: "❌ No file uploaded" });
+        if (!req.file){
+            return res.status(400).json({ error: "❌ No file" });
         }
 
         filePath = req.file.path;
 
-        let endpoint = tools[tool];
+        let fn = tools[tool];
 
-        // 🔥 fallback
-        if (!endpoint) {
-            console.log("⚠️ Unknown tool:", tool);
-            endpoint = "pdf/convert/to/jpg";
+        // 💀 fallback
+        if(!fn){
+            console.log("Unknown tool:", tool);
+            fn = tools["pdf-to-jpg"];
         }
 
-        let extra = {};
+        // 🔥 رفع
+        const fileUrl = await uploadFile(filePath);
 
-        // ⚡ تحسين حسب الأداة
-        if (tool.includes("jpg") || tool.includes("png")) {
-            extra.pages = "0-";
-        }
-
-        if (tool === "compress-pdf") {
-            extra.profile = "web";
-        }
-
-        if (tool === "watermark") {
-            extra.text = "PDFORGE";
-        }
-
-        if (tool === "protect-pdf") {
-            extra.password = "123456";
-        }
-
-        const result = await callPdfCo(endpoint, filePath, extra);
+        // 🔥 تنفيذ
+        const result = await fn(fileUrl);
 
         fs.unlinkSync(filePath);
 
         res.json(result);
 
     } catch (err) {
-        if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+
+        if (filePath && fs.existsSync(filePath)){
+            fs.unlinkSync(filePath);
+        }
 
         res.status(500).json({
             error: true,
-            message: err.message
+            message: err.response?.data || err.message
         });
     }
 });
 
-// ❤️ health
+// ================= health =================
 app.get('/health', (req, res) => {
-    res.json({ status: 'OK 🚀' });
+    res.json({ status: 'OK 🚀 PDF PRO MAX' });
 });
 
+// ================= root =================
 app.get('/', (req, res) => {
-    res.send("🔥 PDF SERVER RUNNING");
+    res.send("🔥 PDF SERVER LIVE");
 });
 
-// 🚀 تشغيل
+// ================= تشغيل =================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log("🔥 SERVER STARTED ON " + PORT);
+    console.log("🔥 SERVER RUNNING ON " + PORT);
 });
