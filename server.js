@@ -3,22 +3,26 @@ const multer = require("multer");
 const fetch = require("node-fetch");
 const cors = require("cors");
 const FormData = require("form-data");
+const path = require("path");
 
 const app = express();
+
+// ===== Middleware =====
 app.use(cors());
 app.use(express.json());
 
+// ===== عرض الموقع (مهم) =====
+app.use(express.static(path.join(__dirname, "public")));
+
+// ===== رفع الملفات =====
 const upload = multer();
 
-// 🔑 API KEY
+// 🔑 API KEY (غيره لو عايز)
 const API_KEY = "a568hm8@gmail.com_odyW3q4nA6wA1XgMy6m5lMVDxZp39jaDDknjPVLQpN4dDDmN69yMk8HF7pIi5Rze";
 
-// ===== TEST =====
+// ===== الصفحة الرئيسية =====
 app.get("/", (req, res) => {
-  res.json({
-    status: "running",
-    message: "🔥 PDFORGE MAX PRO SERVER"
-  });
+  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 // ===== رفع الملف =====
@@ -26,102 +30,111 @@ async function uploadFile(file) {
   const form = new FormData();
   form.append("file", file.buffer, file.originalname);
 
-  const response = await fetch("https://api.pdf.co/v1/file/upload", {
+  const r = await fetch("https://api.pdf.co/v1/file/upload", {
     method: "POST",
     headers: { "x-api-key": API_KEY },
     body: form
   });
 
-  const data = await response.json();
+  const data = await r.json();
 
   if (!data.url) {
-    throw new Error(JSON.stringify(data));
+    throw new Error("فشل رفع الملف");
   }
 
   return data.url;
 }
 
-// ===== تنفيذ العملية =====
-async function processJob(endpoint, payload) {
-  const res = await fetch(endpoint, {
+// ===== تنفيذ العمليات =====
+async function process(url, endpoint, extra = {}) {
+  const r = await fetch(endpoint, {
     method: "POST",
     headers: {
       "x-api-key": API_KEY,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify(payload)
+    body: JSON.stringify({
+      url,
+      async: false, // ⚡ سرعة أعلى
+      ...extra
+    })
   });
 
-  return await res.json();
+  const data = await r.json();
+
+  if (data.error) {
+    throw new Error(data.message || "فشل التحويل");
+  }
+
+  return data;
 }
 
 // ===== الأدوات =====
 const tools = {
-  "pdf-to-word": (url) =>
-    processJob("https://api.pdf.co/v1/pdf/convert/to/docx", { url }),
 
-  "pdf-to-excel": (url) =>
-    processJob("https://api.pdf.co/v1/pdf/convert/to/xlsx", { url }),
+  // تحويل
+  "pdf-to-word": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/to/docx"),
+  "pdf-to-excel": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/to/xlsx"),
+  "pdf-to-ppt": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/to/pptx"),
+  "pdf-to-jpg": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/to/jpg",{ pages:"0-" }),
+  "jpg-to-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/from/image"),
 
-  "pdf-to-ppt": (url) =>
-    processJob("https://api.pdf.co/v1/pdf/convert/to/pptx", { url }),
+  // تنظيم
+  "merge-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/merge2"),
+  "split-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/split"),
 
-  "pdf-to-jpg": (url) =>
-    processJob("https://api.pdf.co/v1/pdf/convert/to/jpg", {
-      url,
-      pages: "0-"
-    }),
+  // تحسين
+  "compress-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/optimize"),
 
-  "jpg-to-pdf": (url) =>
-    processJob("https://api.pdf.co/v1/pdf/convert/from/image", { url }),
+  // حماية
+  "protect-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/security/add",{ password:"123456" }),
+  "unlock-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/security/remove"),
 
-  "merge-pdf": (url) =>
-    processJob("https://api.pdf.co/v1/pdf/merge2", { url }),
+  // تعديل
+  "rotate-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/rotate"),
+  "delete-pages": (u)=>process(u,"https://api.pdf.co/v1/pdf/remove-pages"),
+  "watermark": (u)=>process(u,"https://api.pdf.co/v1/pdf/edit/add",{ text:"PDFORGE" }),
 
-  "split-pdf": (url) =>
-    processJob("https://api.pdf.co/v1/pdf/split", { url }),
-
-  "compress-pdf": (url) =>
-    processJob("https://api.pdf.co/v1/pdf/optimize", { url }),
-
-  "protect-pdf": (url) =>
-    processJob("https://api.pdf.co/v1/pdf/security/add", {
-      url,
-      password: "123456"
-    }),
-
-  "unlock-pdf": (url) =>
-    processJob("https://api.pdf.co/v1/pdf/security/remove", { url }),
-
-  "ocr-pdf": (url) =>
-    processJob("https://api.pdf.co/v1/pdf/convert/to/searchable", { url })
+  // متقدم
+  "ocr-pdf": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/to/searchable"),
+  "pdf-to-pdfa": (u)=>process(u,"https://api.pdf.co/v1/pdf/convert/to/pdfa")
 };
 
 // ===== API =====
 app.post("/api/:tool", upload.single("file"), async (req, res) => {
   try {
+
     if (!req.file) {
       return res.json({ error: "❌ مفيش ملف" });
     }
 
-    const tool = tools[req.params.tool];
+    const fn = tools[req.params.tool];
 
-    if (!tool) {
+    if (!fn) {
       return res.json({ error: "❌ الأداة مش موجودة" });
     }
 
+    // رفع الملف
     const fileUrl = await uploadFile(req.file);
-    const result = await tool(fileUrl);
+
+    // تنفيذ
+    const result = await fn(fileUrl);
 
     res.json(result);
-  } catch (err) {
-    res.json({ error: true, message: err.message });
+
+  } catch (e) {
+    console.log("ERROR:", e.message);
+
+    res.json({
+      error: true,
+      message: e.message
+    });
   }
 });
 
-// ===== تشغيل =====
+// ===== تشغيل السيرفر =====
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log("🔥 SERVER RUNNING ON PORT " + PORT);
+  console.log("🔥 PDFORGE MAX PRO SERVER RUNNING ON PORT " + PORT);
 });
