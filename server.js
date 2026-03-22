@@ -18,7 +18,7 @@ app.use(express.static(path.join(__dirname, "public")));
 const upload = multer();
 
 // 🔑 API KEY
-const API_KEY = "YOUR_API_KEY_HERE"; // حط مفتاحك هنا
+const API_KEY = "a568hm8@gmail.com_odyW3q4nA6wA1XgMy6m5lMVDxZp39jaDDknjPVLQpN4dDDmN69yMk8HF7pIi5Rze"; // حط مفتاحك هنا
 
 // ===== الصفحة الرئيسية =====
 app.get("/", (req, res) => {
