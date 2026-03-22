@@ -18,7 +18,7 @@ const CLOUD_API = process.env.CLOUDCONVERT_API_KEY;
 const CONVERT_API = process.env.CONVERT_API;
 
 // ==============================
-// ⚡ Queue System
+// ⚡ Queue
 // ==============================
 const queue = [];
 let processing = false;
@@ -70,9 +70,9 @@ async function convertConvertAPI(filePath, output, input) {
 }
 
 // ==============================
-// 🟦 CloudConvert
+// 🟦 CloudConvert (FIXED 💀)
 // ==============================
-async function convertCloud(filePath, output) {
+async function convertCloud(filePath, output, ext) {
   try {
     const job = await axios.post(
       "https://api.cloudconvert.com/v2/jobs",
@@ -82,6 +82,7 @@ async function convertCloud(filePath, output) {
           convert: {
             operation: "convert",
             input: "upload",
+            input_format: ext, // 🔥 أهم إصلاح
             output_format: output
           },
           export: { operation: "export/url", input: "convert" }
@@ -135,32 +136,28 @@ async function smartConvert(fileObj, output) {
 
   let result = null;
 
-  // 📄 PDF
   if (ext === "pdf") {
     result = await convertConvertAPI(filePath, output, "pdf");
     if (result?.url) return result;
 
-    return await convertCloud(filePath, output);
+    return await convertCloud(filePath, output, ext);
   }
 
-  // 📊 Office
   if (["docx","xlsx","pptx"].includes(ext)) {
-    result = await convertCloud(filePath, output);
+    result = await convertCloud(filePath, output, ext);
     if (result?.url) return result;
 
     return await convertConvertAPI(filePath, output, ext);
   }
 
-  // 🖼 Images
   if (["jpg","jpeg","png"].includes(ext)) {
-    result = await convertCloud(filePath, output);
+    result = await convertCloud(filePath, output, ext);
     if (result?.url) return result;
 
     return await convertConvertAPI(filePath, output, ext);
   }
 
-  // 🔁 fallback
-  return await convertCloud(filePath, output);
+  return await convertCloud(filePath, output, ext);
 }
 
 // ==============================
@@ -175,14 +172,13 @@ app.post("/convert", upload.single("file"), async (req, res) => {
 
     const output = req.body.output || "pdf";
 
-    // 🔥 أهم إصلاح
-    const originalExt = path.extname(req.file.originalname)
+    const ext = path.extname(req.file.originalname)
       .replace(".", "")
       .toLowerCase();
 
     const fileObj = {
       path: req.file.path,
-      ext: originalExt
+      ext
     };
 
     const data = await addToQueue(fileObj, output);
@@ -192,7 +188,7 @@ app.post("/convert", upload.single("file"), async (req, res) => {
     if (!data || !data.url) {
       return res.json({
         error: true,
-        message: "Conversion failed (API issue)"
+        message: "Conversion failed"
       });
     }
 
@@ -202,7 +198,6 @@ app.post("/convert", upload.single("file"), async (req, res) => {
     });
 
   } catch (e) {
-    console.log("🔥 ERROR:", e.message);
     res.json({
       error: true,
       message: e.message
@@ -211,24 +206,17 @@ app.post("/convert", upload.single("file"), async (req, res) => {
 });
 
 // ==============================
-// ❤️ Health
-// ==============================
 app.get("/health", (req, res) => {
   res.json({ status: "OK 🚀" });
 });
 
-// ==============================
-// 🏠 Root
-// ==============================
 app.get("/", (req, res) => {
-  res.send("🔥 PDFORGE ULTRA SERVER RUNNING");
+  res.send("🔥 PDFORGE ULTRA SERVER");
 });
 
-// ==============================
-// ⚡ Start
 // ==============================
 const PORT = process.env.PORT || 8080;
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log("🔥 SERVER RUNNING ON " + PORT);
+  console.log("🔥 RUNNING " + PORT);
 });
