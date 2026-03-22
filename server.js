@@ -13,12 +13,12 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const upload = multer({ dest: "uploads/" });
 
-// 🔑 APIs من Railway Variables
+// 🔑 APIs
 const CLOUD_API = process.env.CLOUDCONVERT_API_KEY;
 const CONVERT_API = process.env.CONVERT_API;
 
 // ==============================
-// ⚡ Queue System
+// ⚡ Queue
 // ==============================
 const queue = [];
 let processing = false;
@@ -50,23 +50,21 @@ function addToQueue(file, output) {
 // ==============================
 // 🟩 ConvertAPI
 // ==============================
-async function convertConvertAPI(filePath, output, inputFormat) {
+async function convertConvertAPI(filePath, output, input) {
   try {
     const form = new FormData();
     form.append("File", fs.createReadStream(filePath));
 
     const res = await axios.post(
-      `https://v2.convertapi.com/convert/${inputFormat}/to/${output}?Secret=${CONVERT_API}`,
+      `https://v2.convertapi.com/convert/${input}/to/${output}?Secret=${CONVERT_API}`,
       form,
       { headers: form.getHeaders() }
     );
 
-    return {
-      url: res.data?.Files?.[0]?.Url || null
-    };
+    return { url: res.data?.Files?.[0]?.Url || null };
 
   } catch (e) {
-    console.log("❌ ConvertAPI Error");
+    console.log("❌ ConvertAPI:", e.message);
     return null;
   }
 }
@@ -89,81 +87,67 @@ async function convertCloud(filePath, output) {
           export: { operation: "export/url", input: "convert" }
         }
       },
-      {
-        headers: {
-          Authorization: `Bearer ${CLOUD_API}`
-        }
-      }
+      { headers: { Authorization: `Bearer ${CLOUD_API}` } }
     );
 
     const uploadTask = job.data.data.tasks.find(t => t.name === "upload");
 
     const form = new FormData();
-    Object.entries(uploadTask.result.form).forEach(([k, v]) => {
-      form.append(k, v);
-    });
+    Object.entries(uploadTask.result.form).forEach(([k, v]) => form.append(k, v));
     form.append("file", fs.createReadStream(filePath));
 
-    await axios.post(uploadTask.result.url, form, {
-      headers: form.getHeaders()
-    });
+    await axios.post(uploadTask.result.url, form, { headers: form.getHeaders() });
 
-    let fileUrl = null;
+    let url = null;
 
-    while (!fileUrl) {
+    while (!url) {
       const check = await axios.get(
         `https://api.cloudconvert.com/v2/jobs/${job.data.data.id}`,
-        {
-          headers: {
-            Authorization: `Bearer ${CLOUD_API}`
-          }
-        }
+        { headers: { Authorization: `Bearer ${CLOUD_API}` } }
       );
 
-      const exportTask = check.data.data.tasks.find(t => t.name === "export");
+      const exp = check.data.data.tasks.find(t => t.name === "export");
 
-      if (exportTask && exportTask.status === "finished") {
-        fileUrl = exportTask.result.files[0].url;
+      if (exp && exp.status === "finished") {
+        url = exp.result.files[0].url;
       }
 
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise(r => setTimeout(r, 1500));
     }
 
-    return { url: fileUrl };
+    return { url };
 
   } catch (e) {
-    console.log("❌ CloudConvert Error");
+    console.log("❌ Cloud:", e.message);
     return null;
   }
 }
 
 // ==============================
-// 🧠 Smart Convert
+// 🧠 Smart System
 // ==============================
 async function smartConvert(filePath, output) {
 
   const ext = path.extname(filePath).replace(".", "").toLowerCase();
-
   console.log("📂", ext, "➡", output);
 
-  // PDF
+  let result = null;
+
   if (ext === "pdf") {
-    let r = await convertConvertAPI(filePath, output, "pdf");
-    if (r && r.url) return r;
+    result = await convertConvertAPI(filePath, output, "pdf");
+    if (result?.url) return result;
     return await convertCloud(filePath, output);
   }
 
-  // Office
   if (["docx","xlsx","pptx"].includes(ext)) {
-    let r = await convertCloud(filePath, output);
-    if (r && r.url) return r;
+    result = await convertCloud(filePath, output);
+    if (result?.url) return result;
     return await convertConvertAPI(filePath, output, ext);
   }
 
-  // Images
   if (["jpg","jpeg","png"].includes(ext)) {
-    let r = await convertCloud(filePath, output);
-    if (r && r.url) return r;
+    result = await convertCloud(filePath, output);
+    if (result?.url) return result;
     return await convertConvertAPI(filePath, output, ext);
   }
 
@@ -174,9 +158,10 @@ async function smartConvert(filePath, output) {
 // 🚀 Endpoint
 // ==============================
 app.post("/convert", upload.single("file"), async (req, res) => {
+
   try {
     if (!req.file) {
-      return res.status(400).json({ error: true });
+      return res.json({ error: true, message: "No file" });
     }
 
     const output = req.body.output || "pdf";
@@ -186,9 +171,9 @@ app.post("/convert", upload.single("file"), async (req, res) => {
     fs.unlink(req.file.path, () => {});
 
     if (!data || !data.url) {
-      return res.status(500).json({
+      return res.json({
         error: true,
-        message: "Conversion failed"
+        message: "Conversion failed (API issue)"
       });
     }
 
@@ -198,7 +183,8 @@ app.post("/convert", upload.single("file"), async (req, res) => {
     });
 
   } catch (e) {
-    res.status(500).json({
+    console.log("🔥 ERROR:", e.message);
+    res.json({
       error: true,
       message: e.message
     });
@@ -206,10 +192,8 @@ app.post("/convert", upload.single("file"), async (req, res) => {
 });
 
 // ==============================
-// ❤️ Health
-// ==============================
 app.get("/", (req, res) => {
-  res.send("🔥 PDF SERVER WORKING");
+  res.send("🔥 LEGEND SERVER WORKING");
 });
 
 app.get("/health", (req, res) => {
