@@ -1,7 +1,6 @@
 {
-  "name": "pdforge-ultra",
+  "name": "pdf-ultra",
   "version": "1.0.0",
-  "description": "🔥 PDFORGE ULTRA AI",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
