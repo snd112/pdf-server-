@@ -169,3 +169,6 @@ app.get("/health",(req,res)=>{
 });
 
 app.listen(3000,()=>console.log("💀 ULTRA SERVER RUNNING"));
+app.listen(PORT, '0.0.0.0', () => {
+  console.log("🚀 Server Running");
+});
