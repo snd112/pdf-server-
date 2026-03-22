@@ -18,7 +18,7 @@ const CLOUD_API = process.env.CLOUDCONVERT_API_KEY;
 const CONVERT_API = process.env.CONVERT_API;
 
 // ==============================
-// ⚡ Queue
+// ⚡ Queue System
 // ==============================
 const queue = [];
 let processing = false;
@@ -118,7 +118,7 @@ async function convertCloud(filePath, output) {
     return { url };
 
   } catch (e) {
-    console.log("❌ Cloud:", e.message);
+    console.log("❌ CloudConvert:", e.message);
     return null;
   }
 }
@@ -126,31 +126,40 @@ async function convertCloud(filePath, output) {
 // ==============================
 // 🧠 Smart System
 // ==============================
-async function smartConvert(filePath, output) {
+async function smartConvert(fileObj, output) {
 
-  const ext = path.extname(filePath).replace(".", "").toLowerCase();
+  const filePath = fileObj.path;
+  const ext = fileObj.ext;
+
   console.log("📂", ext, "➡", output);
 
   let result = null;
 
+  // 📄 PDF
   if (ext === "pdf") {
     result = await convertConvertAPI(filePath, output, "pdf");
     if (result?.url) return result;
+
     return await convertCloud(filePath, output);
   }
 
+  // 📊 Office
   if (["docx","xlsx","pptx"].includes(ext)) {
     result = await convertCloud(filePath, output);
     if (result?.url) return result;
+
     return await convertConvertAPI(filePath, output, ext);
   }
 
+  // 🖼 Images
   if (["jpg","jpeg","png"].includes(ext)) {
     result = await convertCloud(filePath, output);
     if (result?.url) return result;
+
     return await convertConvertAPI(filePath, output, ext);
   }
 
+  // 🔁 fallback
   return await convertCloud(filePath, output);
 }
 
@@ -161,12 +170,22 @@ app.post("/convert", upload.single("file"), async (req, res) => {
 
   try {
     if (!req.file) {
-      return res.json({ error: true, message: "No file" });
+      return res.json({ error: true, message: "No file uploaded" });
     }
 
     const output = req.body.output || "pdf";
 
-    const data = await addToQueue(req.file.path, output);
+    // 🔥 أهم إصلاح
+    const originalExt = path.extname(req.file.originalname)
+      .replace(".", "")
+      .toLowerCase();
+
+    const fileObj = {
+      path: req.file.path,
+      ext: originalExt
+    };
+
+    const data = await addToQueue(fileObj, output);
 
     fs.unlink(req.file.path, () => {});
 
@@ -192,16 +211,24 @@ app.post("/convert", upload.single("file"), async (req, res) => {
 });
 
 // ==============================
-app.get("/", (req, res) => {
-  res.send("🔥 LEGEND SERVER WORKING");
-});
-
+// ❤️ Health
+// ==============================
 app.get("/health", (req, res) => {
   res.json({ status: "OK 🚀" });
 });
 
 // ==============================
+// 🏠 Root
+// ==============================
+app.get("/", (req, res) => {
+  res.send("🔥 PDFORGE ULTRA SERVER RUNNING");
+});
+
+// ==============================
+// ⚡ Start
+// ==============================
 const PORT = process.env.PORT || 8080;
+
 app.listen(PORT, "0.0.0.0", () => {
-  console.log("🔥 RUNNING " + PORT);
+  console.log("🔥 SERVER RUNNING ON " + PORT);
 });
