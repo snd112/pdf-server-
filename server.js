@@ -18,31 +18,7 @@ const CLOUD_API = process.env.CLOUDCONVERT_API_KEY;
 const CONVERT_API = process.env.CONVERT_API;
 
 // ==============================
-// 🧠 Free Limit System
-// ==============================
-const users = {};
-const FREE_LIMIT = 999999;
-
-function getIP(req) {
-  return req.headers["x-forwarded-for"] || req.socket.remoteAddress;
-}
-
-function checkLimit(req, res) {
-  const ip = getIP(req);
-
-  if (!users[ip]) users[ip] = { count: 0 };
-
-  if (users[ip].count >= FREE_LIMIT) {
-    res.status(403).json({ error: true, message: "LIMIT" });
-    return false;
-  }
-
-  users[ip].count++;
-  return true;
-}
-
-// ==============================
-// ⚡ Queue
+// ⚡ Queue System
 // ==============================
 const queue = [];
 let processing = false;
@@ -75,45 +51,20 @@ function addToQueue(file, output) {
 // 🟦 CloudConvert (FIXED)
 // ==============================
 async function convertCloud(filePath, output) {
-
-  const job = await axios.post(
-    "https://api.cloudconvert.com/v2/jobs",
-    {
-      tasks: {
-        upload: { operation: "import/upload" },
-        convert: {
-          operation: "convert",
-          input: "upload",
-          output_format: output
-        },
-        export: { operation: "export/url", input: "convert" }
-      }
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${CLOUD_API}`
-      }
-    }
-  );
-
-  const uploadTask = job.data.data.tasks.find(t => t.name === "upload");
-
-  const form = new FormData();
-  Object.entries(uploadTask.result.form).forEach(([k, v]) => {
-    form.append(k, v);
-  });
-  form.append("file", fs.createReadStream(filePath));
-
-  await axios.post(uploadTask.result.url, form, {
-    headers: form.getHeaders()
-  });
-
-  // wait result
-  let fileUrl = null;
-
-  while (!fileUrl) {
-    const check = await axios.get(
-      `https://api.cloudconvert.com/v2/jobs/${job.data.data.id}`,
+  try {
+    const job = await axios.post(
+      "https://api.cloudconvert.com/v2/jobs",
+      {
+        tasks: {
+          upload: { operation: "import/upload" },
+          convert: {
+            operation: "convert",
+            input: "upload",
+            output_format: output
+          },
+          export: { operation: "export/url", input: "convert" }
+        }
+      },
       {
         headers: {
           Authorization: `Bearer ${CLOUD_API}`
@@ -121,47 +72,83 @@ async function convertCloud(filePath, output) {
       }
     );
 
-    const exportTask = check.data.data.tasks.find(t => t.name === "export");
+    const uploadTask = job.data.data.tasks.find(t => t.name === "upload");
 
-    if (exportTask && exportTask.status === "finished") {
-      fileUrl = exportTask.result.files[0].url;
+    const form = new FormData();
+    Object.entries(uploadTask.result.form).forEach(([k, v]) => {
+      form.append(k, v);
+    });
+    form.append("file", fs.createReadStream(filePath));
+
+    await axios.post(uploadTask.result.url, form, {
+      headers: form.getHeaders()
+    });
+
+    let fileUrl = null;
+
+    while (!fileUrl) {
+      const check = await axios.get(
+        `https://api.cloudconvert.com/v2/jobs/${job.data.data.id}`,
+        {
+          headers: {
+            Authorization: `Bearer ${CLOUD_API}`
+          }
+        }
+      );
+
+      const exportTask = check.data.data.tasks.find(t => t.name === "export");
+
+      if (exportTask && exportTask.status === "finished") {
+        fileUrl = exportTask.result.files[0].url;
+      }
+
+      await new Promise(r => setTimeout(r, 2000));
     }
 
-    await new Promise(r => setTimeout(r, 2000));
-  }
+    return { url: fileUrl };
 
-  return { url: fileUrl };
+  } catch (e) {
+    console.log("CloudConvert Failed → fallback");
+    return null;
+  }
 }
 
 // ==============================
-// 🟩 ConvertAPI
+// 🟩 ConvertAPI (SAFE)
 // ==============================
 async function convertConvertAPI(filePath, output) {
+  try {
+    const form = new FormData();
+    form.append("File", fs.createReadStream(filePath));
 
-  const form = new FormData();
-  form.append("File", fs.createReadStream(filePath));
+    const res = await axios.post(
+      `https://v2.convertapi.com/convert/pdf/to/${output}?Secret=${CONVERT_API}`,
+      form,
+      { headers: form.getHeaders() }
+    );
 
-  const res = await axios.post(
-    `https://v2.convertapi.com/convert/pdf/to/${output}?Secret=${CONVERT_API}`,
-    form,
-    { headers: form.getHeaders() }
-  );
+    return {
+      url: res.data?.Files?.[0]?.Url || null
+    };
 
-  return {
-    url: res.data.Files[0].Url
-  };
+  } catch (e) {
+    console.log("ConvertAPI Failed");
+    return null;
+  }
 }
 
 // ==============================
-// 🧠 Smart Router
+// 🧠 Smart Convert
 // ==============================
 async function smartConvert(filePath, output) {
 
-  try {
-    return await convertCloud(filePath, output);
-  } catch {
-    return await convertConvertAPI(filePath, output);
+  let result = await convertCloud(filePath, output);
+
+  if (!result || !result.url) {
+    result = await convertConvertAPI(filePath, output);
   }
+
+  return result;
 }
 
 // ==============================
@@ -169,14 +156,23 @@ async function smartConvert(filePath, output) {
 // ==============================
 app.post("/convert", upload.single("file"), async (req, res) => {
 
-  if (!checkLimit(req, res)) return;
-
   try {
+    if (!req.file) {
+      return res.status(400).json({ error: true, message: "No file uploaded" });
+    }
+
     const output = req.body.output || "pdf";
 
     const data = await addToQueue(req.file.path, output);
 
     fs.unlink(req.file.path, () => {});
+
+    if (!data || !data.url) {
+      return res.status(500).json({
+        error: true,
+        message: "Conversion failed"
+      });
+    }
 
     res.json({
       success: true,
@@ -184,13 +180,20 @@ app.post("/convert", upload.single("file"), async (req, res) => {
     });
 
   } catch (e) {
-    res.status(500).json({ error: true });
+    res.status(500).json({
+      error: true,
+      message: e.message
+    });
   }
 });
 
 // ==============================
 // ❤️ Health
 // ==============================
+app.get("/", (req, res) => {
+  res.send("🔥 PDF SERVER WORKING");
+});
+
 app.get("/health", (req, res) => {
   res.json({ status: "OK 🚀" });
 });
@@ -201,5 +204,5 @@ app.get("/health", (req, res) => {
 const PORT = process.env.PORT || 8080;
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log("🔥 SERVER RUNNING " + PORT);
+  console.log("🔥 SERVER RUNNING ON " + PORT);
 });
