@@ -11,14 +11,14 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ===== عرض الموقع (مهم) =====
+// ===== عرض الموقع =====
 app.use(express.static(path.join(__dirname, "public")));
 
 // ===== رفع الملفات =====
 const upload = multer();
 
-// 🔑 API KEY (غيره لو عايز)
-const API_KEY = "a568hm8@gmail.com_odyW3q4nA6wA1XgMy6m5lMVDxZp39jaDDknjPVLQpN4dDDmN69yMk8HF7pIi5Rze";
+// 🔑 API KEY
+const API_KEY = "YOUR_API_KEY_HERE"; // حط مفتاحك هنا
 
 // ===== الصفحة الرئيسية =====
 app.get("/", (req, res) => {
@@ -39,7 +39,7 @@ async function uploadFile(file) {
   const data = await r.json();
 
   if (!data.url) {
-    throw new Error("فشل رفع الملف");
+    throw new Error("فشل رفع الملف: " + JSON.stringify(data));
   }
 
   return data.url;
@@ -55,7 +55,7 @@ async function process(url, endpoint, extra = {}) {
     },
     body: JSON.stringify({
       url,
-      async: false, // ⚡ سرعة أعلى
+      async: false, // ⚡ سريع
       ...extra
     })
   });
@@ -114,7 +114,7 @@ app.post("/api/:tool", upload.single("file"), async (req, res) => {
       return res.json({ error: "❌ الأداة مش موجودة" });
     }
 
-    // رفع الملف
+    // رفع
     const fileUrl = await uploadFile(req.file);
 
     // تنفيذ
@@ -132,8 +132,10 @@ app.post("/api/:tool", upload.single("file"), async (req, res) => {
   }
 });
 
-// ===== تشغيل السيرفر =====
-const PORT = process.env.PORT || 3000;
+// ===== تشغيل السيرفر (🔥 بدون كراش) =====
+const PORT = (typeof process !== "undefined" && process.env && process.env.PORT)
+  ? process.env.PORT
+  : 3000;
 
 app.listen(PORT, () => {
   console.log("🔥 PDFORGE MAX PRO SERVER RUNNING ON PORT " + PORT);
