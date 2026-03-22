@@ -21,7 +21,7 @@ const CONVERT_API = process.env.CONVERT_API;
 // 🧠 Free Limit System
 // ==============================
 const users = {};
-const FREE_LIMIT = 3;
+const FREE_LIMIT = 999999;
 
 function getIP(req) {
   return req.headers["x-forwarded-for"] || req.socket.remoteAddress;
