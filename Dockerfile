@@ -1,6 +1,5 @@
 FROM node:18-bullseye
 
-# تثبيت الأدوات
 RUN apt-get update && apt-get install -y \
     libreoffice \
     poppler-utils \
