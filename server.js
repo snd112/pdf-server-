@@ -5,7 +5,6 @@ const compression = require("compression");
 const jwt = require("jsonwebtoken");
 const fs = require("fs");
 const { spawn } = require("child_process");
-const PQueue = require("p-queue").default;
 
 const app = express();
 
@@ -18,9 +17,8 @@ app.use("/outputs", express.static("outputs"));
 const SECRET = "pdf-secret";
 const users = {};
 const jobs = {};
-const queue = new PQueue({ concurrency: 2 });
 
-// إنشاء الفولدرات لو مش موجودة
+// إنشاء الفولدرات
 if (!fs.existsSync("uploads")) fs.mkdirSync("uploads");
 if (!fs.existsSync("outputs")) fs.mkdirSync("outputs");
 
@@ -65,6 +63,7 @@ function auth(req, res, next) {
   }
 }
 
+// ================= AUTH ROUTES =================
 app.post("/register", (req, res) => {
   const { email, password } = req.body;
 
@@ -111,35 +110,26 @@ app.post("/preview", upload.single("file"), async (req, res) => {
 });
 
 // ================= MERGE =================
-app.post("/merge", auth, upload.array("files"), async (req, res) => {
-
-  if (!req.files || req.files.length === 0) {
-    return res.json({ error: true, message: "❌ no files uploaded" });
-  }
-
-  const id = Date.now();
-  jobs[id] = { status: "processing" };
-
-  queue.add(async () => {
-    try {
-      const files = req.files.map(f => f.path);
-
-      await run("pdfunite", [...files, `outputs/${id}.pdf`]);
-
-      users[req.user].files.push(`/outputs/${id}.pdf`);
-
-      jobs[id] = {
-        status: "done",
-        url: `/outputs/${id}.pdf`
-      };
-
-    } catch (e) {
-      console.log("🔥 MERGE ERROR:", e);
-      jobs[id] = { status: "error", message: e };
+app.post("/merge", upload.array("files"), async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.json({ error: true, message: "❌ no files uploaded" });
     }
-  });
 
-  res.json({ jobId: id });
+    const id = Date.now();
+    const files = req.files.map(f => f.path);
+
+    await run("pdfunite", [...files, `outputs/${id}.pdf`]);
+
+    res.json({
+      status: "done",
+      url: `/outputs/${id}.pdf`
+    });
+
+  } catch (e) {
+    console.log("🔥 MERGE ERROR:", e);
+    res.json({ error: true, message: e });
+  }
 });
 
 // ================= STATUS =================
@@ -155,6 +145,15 @@ app.get("/test", (req, res) => {
 // ================= HOME =================
 app.get("/", (req, res) => {
   res.send("🔥 PDFORGE ULTRA RUNNING");
+});
+
+// ================= GLOBAL ERROR =================
+process.on("uncaughtException", err => {
+  console.log("🔥 ERROR:", err);
+});
+
+process.on("unhandledRejection", err => {
+  console.log("🔥 PROMISE ERROR:", err);
 });
 
 // ================= START =================
