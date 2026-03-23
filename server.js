@@ -13,8 +13,8 @@ app.use(express.static("public"));
 const upload = multer({ dest: "uploads/" });
 
 // بيانات Aspose من Environment Variables
-const CLIENT_ID = process.env.ASPOSE_CLIENT_ID;
-const CLIENT_SECRET = process.env.ASPOSE_CLIENT_SECRET;
+const CLIENT_ID = process.env.5e275f4f-054f-44f2-a66b-aedcbde62696;
+const CLIENT_SECRET = process.env.01d3959e869e236df3d848fadef17f09;
 
 let accessToken = null;
 
