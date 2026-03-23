@@ -6,9 +6,13 @@ const fs = require("fs");
 const path = require("path");
 
 const app = express();
+
+// ✅ مهم
 app.use(cors());
 app.use(express.static("public"));
+app.use("/outputs", express.static("outputs"));
 
+// رفع الملفات
 const upload = multer({ dest: "uploads/" });
 
 // =============================
@@ -17,145 +21,154 @@ const upload = multer({ dest: "uploads/" });
 function run(cmd) {
   return new Promise((resolve, reject) => {
     exec(cmd, (err, stdout, stderr) => {
-      if (err) return reject(stderr);
+      if (err) {
+        console.log("❌ CMD ERROR:", stderr);
+        return reject(stderr);
+      }
       resolve(stdout);
     });
   });
 }
 
 // =============================
-// 📄 Convert Office → PDF
+// 📄 Office → PDF
 // =============================
 app.post("/word-to-pdf", upload.single("file"), async (req, res) => {
-  const file = req.file.path;
-
-  await run(`libreoffice --headless --convert-to pdf ${file} --outdir outputs`);
-
-  const out = file.replace(path.extname(file), ".pdf");
-  res.json({ url: "/outputs/" + path.basename(out) });
+  try {
+    await run(`libreoffice --headless --convert-to pdf ${req.file.path} --outdir outputs`);
+    res.json({ url: "/outputs/" + path.basename(req.file.path) + ".pdf" });
+  } catch {
+    res.json({ error: true });
+  }
 });
 
 app.post("/excel-to-pdf", upload.single("file"), async (req, res) => {
-  const file = req.file.path;
-
-  await run(`libreoffice --headless --convert-to pdf ${file} --outdir outputs`);
-
-  const out = file.replace(path.extname(file), ".pdf");
-  res.json({ url: "/outputs/" + path.basename(out) });
+  try {
+    await run(`libreoffice --headless --convert-to pdf ${req.file.path} --outdir outputs`);
+    res.json({ url: "/outputs/" + path.basename(req.file.path) + ".pdf" });
+  } catch {
+    res.json({ error: true });
+  }
 });
 
 app.post("/ppt-to-pdf", upload.single("file"), async (req, res) => {
-  const file = req.file.path;
-
-  await run(`libreoffice --headless --convert-to pdf ${file} --outdir outputs`);
-
-  const out = file.replace(path.extname(file), ".pdf");
-  res.json({ url: "/outputs/" + path.basename(out) });
+  try {
+    await run(`libreoffice --headless --convert-to pdf ${req.file.path} --outdir outputs`);
+    res.json({ url: "/outputs/" + path.basename(req.file.path) + ".pdf" });
+  } catch {
+    res.json({ error: true });
+  }
 });
 
 // =============================
-// 🔄 PDF → Office
+// 🔄 PDF → Word
 // =============================
 app.post("/pdf-to-word", upload.single("file"), async (req, res) => {
-  const file = req.file.path;
-
-  await run(`libreoffice --headless --convert-to docx ${file} --outdir outputs`);
-
-  const out = file.replace(".pdf", ".docx");
-  res.json({ url: "/outputs/" + path.basename(out) });
+  try {
+    await run(`libreoffice --headless --convert-to docx ${req.file.path} --outdir outputs`);
+    res.json({ url: "/outputs/" + path.basename(req.file.path) + ".docx" });
+  } catch {
+    res.json({ error: true });
+  }
 });
 
 // =============================
 // 🖼 PDF → JPG
 // =============================
 app.post("/pdf-to-jpg", upload.single("file"), async (req, res) => {
-  const file = req.file.path;
-  const out = "outputs/output.jpg";
-
-  await run(`pdftoppm -jpeg ${file} outputs/output`);
-
-  res.json({ url: "/" + out });
+  try {
+    await run(`pdftoppm -jpeg ${req.file.path} outputs/output`);
+    res.json({ url: "/outputs/output-1.jpg" });
+  } catch {
+    res.json({ error: true });
+  }
 });
 
 // =============================
 // 🖼 JPG → PDF
 // =============================
 app.post("/jpg-to-pdf", upload.single("file"), async (req, res) => {
-  const file = req.file.path;
-  const out = "outputs/output.pdf";
-
-  await run(`convert ${file} ${out}`);
-
-  res.json({ url: "/" + out });
+  try {
+    await run(`convert ${req.file.path} outputs/output.pdf`);
+    res.json({ url: "/outputs/output.pdf" });
+  } catch {
+    res.json({ error: true });
+  }
 });
 
 // =============================
 // 📦 Merge PDF
 // =============================
 app.post("/merge", upload.array("files"), async (req, res) => {
-  const files = req.files.map(f => f.path).join(" ");
-  const out = "outputs/merged.pdf";
-
-  await run(`pdfunite ${files} ${out}`);
-
-  res.json({ url: "/" + out });
+  try {
+    const files = req.files.map(f => f.path).join(" ");
+    await run(`pdfunite ${files} outputs/merged.pdf`);
+    res.json({ url: "/outputs/merged.pdf" });
+  } catch {
+    res.json({ error: true });
+  }
 });
 
 // =============================
 // ✂ Split PDF
 // =============================
 app.post("/split", upload.single("file"), async (req, res) => {
-  const file = req.file.path;
-
-  await run(`pdfseparate ${file} outputs/page-%d.pdf`);
-
-  res.json({ url: "/outputs/page-1.pdf" });
+  try {
+    await run(`pdfseparate ${req.file.path} outputs/page-%d.pdf`);
+    res.json({ url: "/outputs/page-1.pdf" });
+  } catch {
+    res.json({ error: true });
+  }
 });
 
 // =============================
 // 🗜 Compress PDF
 // =============================
 app.post("/compress", upload.single("file"), async (req, res) => {
-  const file = req.file.path;
-  const out = "outputs/compressed.pdf";
-
-  await run(`gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/ebook -dNOPAUSE -dQUIET -dBATCH -sOutputFile=${out} ${file}`);
-
-  res.json({ url: "/" + out });
+  try {
+    await run(`gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/ebook -dNOPAUSE -dQUIET -dBATCH -sOutputFile=outputs/compressed.pdf ${req.file.path}`);
+    res.json({ url: "/outputs/compressed.pdf" });
+  } catch {
+    res.json({ error: true });
+  }
 });
 
 // =============================
-// 🔐 Protect PDF
+// 🔐 Protect
 // =============================
 app.post("/protect", upload.single("file"), async (req, res) => {
-  const file = req.file.path;
-  const out = "outputs/protected.pdf";
-
-  await run(`qpdf --encrypt 1234 1234 256 -- ${file} ${out}`);
-
-  res.json({ url: "/" + out });
+  try {
+    await run(`qpdf --encrypt 1234 1234 256 -- ${req.file.path} outputs/protected.pdf`);
+    res.json({ url: "/outputs/protected.pdf" });
+  } catch {
+    res.json({ error: true });
+  }
 });
 
 // =============================
-// 🔓 Unlock PDF
+// 🔓 Unlock
 // =============================
 app.post("/unlock", upload.single("file"), async (req, res) => {
-  const file = req.file.path;
-  const out = "outputs/unlocked.pdf";
-
-  await run(`qpdf --decrypt ${file} ${out}`);
-
-  res.json({ url: "/" + out });
+  try {
+    await run(`qpdf --decrypt ${req.file.path} outputs/unlocked.pdf`);
+    res.json({ url: "/outputs/unlocked.pdf" });
+  } catch {
+    res.json({ error: true });
+  }
 });
 
+// =============================
+// 🏠 Home
 // =============================
 app.get("/", (req, res) => {
   res.send("🔥 PDF SERVER RUNNING");
 });
 
 // =============================
+// 🚀 Start Server (مهم جدًا)
+// =============================
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log("🚀 Server Started on port:", PORT);
+  console.log("🚀 Server running on port:", PORT);
 });
