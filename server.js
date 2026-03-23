@@ -20,30 +20,40 @@ const users = {};
 const jobs = {};
 const queue = new PQueue({ concurrency: 2 });
 
+// إنشاء الفولدرات لو مش موجودة
 if (!fs.existsSync("uploads")) fs.mkdirSync("uploads");
 if (!fs.existsSync("outputs")) fs.mkdirSync("outputs");
 
+// رفع الملفات
 const upload = multer({
   dest: "uploads/",
   limits: { fileSize: 20 * 1024 * 1024 }
 });
 
-// ===== RUN CMD =====
+// ================= RUN CMD =================
 function run(cmd, args) {
   return new Promise((resolve, reject) => {
+    console.log("🚀 Running:", cmd, args.join(" "));
+
     const p = spawn(cmd, args);
-    let err = "";
 
-    p.stderr.on("data", d => err += d.toString());
+    let error = "";
 
-    p.on("close", code => {
-      if (code !== 0) return reject(err);
+    p.stderr.on("data", (data) => {
+      error += data.toString();
+    });
+
+    p.on("close", (code) => {
+      if (code !== 0) {
+        console.log("❌ CMD ERROR:", error);
+        return reject(error);
+      }
       resolve(true);
     });
   });
 }
 
-// ===== AUTH =====
+// ================= AUTH =================
 function auth(req, res, next) {
   try {
     const token = req.headers.authorization;
@@ -57,17 +67,25 @@ function auth(req, res, next) {
 
 app.post("/register", (req, res) => {
   const { email, password } = req.body;
+
+  if (!email || !password)
+    return res.json({ error: "missing data" });
+
   if (users[email]) return res.json({ error: "exists" });
+
   users[email] = { password, files: [] };
+
   res.json({ success: true });
 });
 
 app.post("/login", (req, res) => {
   const { email, password } = req.body;
+
   if (!users[email] || users[email].password !== password)
     return res.json({ error: "invalid" });
 
   const token = jwt.sign({ email }, SECRET);
+
   res.json({ token });
 });
 
@@ -75,18 +93,30 @@ app.get("/my-files", auth, (req, res) => {
   res.json(users[req.user].files || []);
 });
 
-// ===== PREVIEW =====
+// ================= PREVIEW =================
 app.post("/preview", upload.single("file"), async (req, res) => {
   try {
+    if (!req.file) {
+      return res.json({ error: true, message: "❌ no file uploaded" });
+    }
+
     await run("pdftoppm", ["-jpeg", req.file.path, "outputs/preview"]);
+
     res.json({ url: "/outputs/preview-1.jpg" });
-  } catch {
-    res.json({ error: true });
+
+  } catch (e) {
+    console.log("🔥 PREVIEW ERROR:", e);
+    res.json({ error: true, message: e });
   }
 });
 
-// ===== MERGE =====
+// ================= MERGE =================
 app.post("/merge", auth, upload.array("files"), async (req, res) => {
+
+  if (!req.files || req.files.length === 0) {
+    return res.json({ error: true, message: "❌ no files uploaded" });
+  }
+
   const id = Date.now();
   jobs[id] = { status: "processing" };
 
@@ -98,27 +128,38 @@ app.post("/merge", auth, upload.array("files"), async (req, res) => {
 
       users[req.user].files.push(`/outputs/${id}.pdf`);
 
-      jobs[id] = { status: "done", url: `/outputs/${id}.pdf` };
+      jobs[id] = {
+        status: "done",
+        url: `/outputs/${id}.pdf`
+      };
 
-    } catch {
-      jobs[id] = { status: "error" };
+    } catch (e) {
+      console.log("🔥 MERGE ERROR:", e);
+      jobs[id] = { status: "error", message: e };
     }
   });
 
   res.json({ jobId: id });
 });
 
-// ===== STATUS =====
+// ================= STATUS =================
 app.get("/status/:id", (req, res) => {
   res.json(jobs[req.params.id] || { status: "notfound" });
 });
 
-// ===== HOME =====
+// ================= TEST =================
+app.get("/test", (req, res) => {
+  res.send("✅ Server OK");
+});
+
+// ================= HOME =================
 app.get("/", (req, res) => {
   res.send("🔥 PDFORGE ULTRA RUNNING");
 });
 
+// ================= START =================
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, "0.0.0.0", () => {
-  console.log("🚀 Server running:", PORT);
+  console.log("🚀 Server running on port:", PORT);
 });
