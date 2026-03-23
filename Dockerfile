@@ -1,12 +1,20 @@
-FROM node:18
+FROM node:18-bullseye
+
+ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \
     libreoffice \
     poppler-utils \
     ghostscript \
-    imagemagick \
     qpdf \
-    && apt-get clean
+    pdftk \
+    imagemagick \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    tesseract-ocr-ara \
+    wkhtmltopdf \
+    fonts-dejavu \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN sed -i 's/rights="none"/rights="read|write"/g' /etc/ImageMagick-6/policy.xml || true
 
@@ -18,9 +26,8 @@ RUN npm install
 COPY . .
 
 RUN mkdir -p uploads outputs
-
-ENV PORT=3000
+RUN chmod -R 777 uploads outputs
 
 EXPOSE 3000
 
-CMD ["npm", "start"]
+CMD ["node","server.js"]
