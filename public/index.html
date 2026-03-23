@@ -8,42 +8,47 @@
 <style>
 body {
   font-family: Arial;
-  background: #0b1b2b;
-  color: white;
+  background: #0b1220;
+  color: #fff;
   text-align: center;
   padding: 20px;
 }
 
 .container {
+  background: #111a2e;
+  padding: 20px;
+  border-radius: 15px;
   max-width: 400px;
   margin: auto;
-  background: #10263a;
-  padding: 20px;
-  border-radius: 12px;
+  box-shadow: 0 0 20px rgba(0,0,0,0.5);
 }
 
 select, input {
   width: 100%;
-  margin: 10px 0;
   padding: 10px;
-  border-radius: 8px;
+  margin: 10px 0;
+  border-radius: 10px;
   border: none;
 }
 
 button {
   width: 100%;
   padding: 12px;
-  margin: 8px 0;
-  border: none;
+  margin: 10px 0;
   border-radius: 10px;
+  border: none;
   background: #22c55e;
   color: white;
   font-size: 16px;
   cursor: pointer;
 }
 
-#result {
-  margin-top: 20px;
+button:hover {
+  background: #16a34a;
+}
+
+#result a {
+  color: #4ade80;
 }
 </style>
 
@@ -56,93 +61,138 @@ button {
 
 <select id="tool">
   <option value="merge">دمج PDF</option>
-  <option value="split">تقسيم PDF</option>
-  <option value="compress">ضغط PDF</option>
-  <option value="pdf-to-word">PDF → Word</option>
-  <option value="pdf-to-jpg">PDF → JPG</option>
-  <option value="jpg-to-pdf">JPG → PDF</option>
-  <option value="protect">حماية PDF</option>
-  <option value="unlock">فك الحماية</option>
+  <option value="preview">معاينة PDF</option>
 </select>
 
-<input type="file" id="file" multiple>
+<input type="file" id="fileInput" multiple>
 
 <button onclick="preview()">👁 Preview</button>
-<button onclick="run()">🚀 تنفيذ</button>
+<button onclick="runTool()">🚀 تنفيذ</button>
 
+<div id="status"></div>
 <div id="result"></div>
 
 </div>
 
 <script>
 
-const API = "https://pdf-server-production-82f5.up.railway.app";
+let token = "";
 
-async function preview() {
-  try {
-    const file = document.getElementById("file").files[0];
-    if (!file) return alert("اختار ملف");
+// 🔐 تسجيل دخول تلقائي
+async function login() {
+  const res = await fetch("/login", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      email: "test@test.com",
+      password: "123456"
+    })
+  });
 
-    const fd = new FormData();
-    fd.append("file", file);
+  const data = await res.json();
 
-    document.getElementById("result").innerText = "⏳ جاري المعاينة...";
-
-    const res = await fetch(API + "/preview", {
+  if (!data.token) {
+    await fetch("/register", {
       method: "POST",
-      body: fd
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        email: "test@test.com",
+        password: "123456"
+      })
     });
+    return login();
+  }
 
-    const data = await res.json();
+  token = data.token;
+}
 
-    if (data.url) {
-      document.getElementById("result").innerHTML =
-        `<img src="${API + data.url}" width="100%">`;
-    } else {
-      document.getElementById("result").innerText = "❌ فشل Preview";
-    }
+login();
 
-  } catch (e) {
-    alert("❌ السيرفر مش بيرد");
-    console.log(e);
+
+// 👁 Preview
+async function preview() {
+  const file = document.getElementById("fileInput").files[0];
+  if (!file) return alert("اختار ملف");
+
+  const form = new FormData();
+  form.append("file", file);
+
+  document.getElementById("status").innerText = "⏳ جاري المعاينة...";
+
+  const res = await fetch("/preview", {
+    method: "POST",
+    body: form
+  });
+
+  const data = await res.json();
+
+  if (data.error) {
+    alert(data.message);
+    return;
+  }
+
+  document.getElementById("result").innerHTML =
+    `<img src="${data.url}" width="100%">`;
+}
+
+
+// 🚀 تشغيل الأدوات
+async function runTool() {
+  const tool = document.getElementById("tool").value;
+  const files = document.getElementById("fileInput").files;
+
+  if (files.length === 0) return alert("اختار ملفات");
+
+  const form = new FormData();
+
+  for (let f of files) {
+    form.append("files", f);
+  }
+
+  document.getElementById("status").innerText = "⏳ جاري التنفيذ...";
+
+  const res = await fetch(`/${tool}`, {
+    method: "POST",
+    headers: {
+      "Authorization": token
+    },
+    body: form
+  });
+
+  const data = await res.json();
+
+  if (data.error) {
+    alert(data.message);
+    return;
+  }
+
+  if (tool === "merge") {
+    checkStatus(data.jobId);
   }
 }
 
-async function run() {
-  try {
-    const tool = document.getElementById("tool").value;
-    const files = document.getElementById("file").files;
 
-    if (files.length === 0) return alert("اختار ملف");
+// ⏳ متابعة الحالة
+async function checkStatus(id) {
+  const interval = setInterval(async () => {
 
-    const fd = new FormData();
-
-    if (tool === "merge") {
-      for (let f of files) fd.append("files", f);
-    } else {
-      fd.append("file", files[0]);
-    }
-
-    document.getElementById("result").innerText = "⏳ جاري التنفيذ...";
-
-    const res = await fetch(API + "/" + tool, {
-      method: "POST",
-      body: fd
-    });
-
+    const res = await fetch(`/status/${id}`);
     const data = await res.json();
 
-    if (data.url) {
+    if (data.status === "done") {
+      clearInterval(interval);
+
+      document.getElementById("status").innerText = "✅ تم!";
       document.getElementById("result").innerHTML =
-        `<a href="${API + data.url}" target="_blank">📥 تحميل الملف</a>`;
-    } else {
-      document.getElementById("result").innerText = "❌ Error في السيرفر";
+        `<a href="${data.url}" target="_blank">📥 تحميل الملف</a>`;
     }
 
-  } catch (e) {
-    alert("❌ السيرفر مش بيرد");
-    console.log(e);
-  }
+    if (data.status === "error") {
+      clearInterval(interval);
+      alert("❌ حصل خطأ");
+    }
+
+  }, 2000);
 }
 
 </script>
