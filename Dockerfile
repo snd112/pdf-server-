@@ -1,4 +1,4 @@
-FROM node:18-bullseye
+FROM node:18
 
 RUN apt-get update && apt-get install -y \
     libreoffice \
@@ -6,7 +6,9 @@ RUN apt-get update && apt-get install -y \
     ghostscript \
     imagemagick \
     qpdf \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean
+
+RUN sed -i 's/rights="none"/rights="read|write"/g' /etc/ImageMagick-6/policy.xml || true
 
 WORKDIR /app
 
@@ -16,6 +18,8 @@ RUN npm install
 COPY . .
 
 RUN mkdir -p uploads outputs
+
+ENV PORT=3000
 
 EXPOSE 3000
 
