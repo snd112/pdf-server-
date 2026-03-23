@@ -18,10 +18,6 @@ const SECRET = "pdf-secret";
 const users = {};
 const jobs = {};
 
-// 🔥 Queue بسيط بدل p-queue
-let isProcessing = false;
-const jobQueue = [];
-
 // إنشاء الفولدرات
 if (!fs.existsSync("uploads")) fs.mkdirSync("uploads");
 if (!fs.existsSync("outputs")) fs.mkdirSync("outputs");
@@ -34,9 +30,7 @@ const upload = multer({
 
 // ================= RUN CMD =================
 function run(cmd, args) {
-  return new Promise((resolve, reject) => {
-    console.log("🚀 Running:", cmd, args.join(" "));
-
+  return new Promise((resolve) => {
     const p = spawn(cmd, args);
 
     let error = "";
@@ -47,29 +41,12 @@ function run(cmd, args) {
 
     p.on("close", (code) => {
       if (code !== 0) {
-        console.log("❌ CMD ERROR:", error);
-        return reject(error);
+        console.log("❌ ERROR:", error);
+        return resolve(false); // 👈 مهم
       }
       resolve(true);
     });
   });
-}
-
-// ================= QUEUE =================
-async function processQueue() {
-  if (isProcessing || jobQueue.length === 0) return;
-
-  isProcessing = true;
-  const job = jobQueue.shift();
-
-  try {
-    await job();
-  } catch (e) {
-    console.log("🔥 JOB ERROR:", e);
-  }
-
-  isProcessing = false;
-  processQueue();
 }
 
 // ================= AUTH =================
@@ -84,6 +61,30 @@ function auth(req, res, next) {
   }
 }
 
+// ================= AUTH ROUTES =================
+app.post("/register", (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password)
+    return res.json({ error: "missing data" });
+
+  if (users[email]) return res.json({ error: "exists" });
+
+  users[email] = { password, files: [] };
+
+  res.json({ success: true });
+});
+
+app.post("/login", (req, res) => {
+  const { email, password } = req.body;
+
+  if (!users[email] || users[email].password !== password)
+    return res.json({ error: "invalid" });
+
+  const token = jwt.sign({ email }, SECRET);
+  res.json({ token });
+});
+
 // ================= PREVIEW =================
 app.post("/preview", upload.single("file"), async (req, res) => {
   try {
@@ -91,67 +92,72 @@ app.post("/preview", upload.single("file"), async (req, res) => {
       return res.json({ error: true, message: "❌ no file" });
     }
 
-    await run("pdftoppm", ["-jpeg", req.file.path, "outputs/preview"]);
+    const ok = await run("pdftoppm", [
+      "-jpeg",
+      req.file.path,
+      "outputs/preview"
+    ]);
+
+    if (!ok) {
+      return res.json({ error: true, message: "preview failed" });
+    }
 
     res.json({ url: "/outputs/preview-1.jpg" });
 
   } catch (e) {
-    console.log("🔥 PREVIEW ERROR:", e);
-    res.json({ error: true, message: e });
+    res.json({ error: true, message: "server error" });
   }
 });
 
 // ================= MERGE =================
-app.post("/merge", auth, upload.array("files"), async (req, res) => {
-
-  if (!req.files || req.files.length === 0) {
-    return res.json({ error: true, message: "❌ no files" });
-  }
-
-  const id = Date.now();
-  jobs[id] = { status: "processing" };
-
-  jobQueue.push(async () => {
-    try {
-      const files = req.files.map(f => f.path);
-
-      await run("pdfunite", [...files, `outputs/${id}.pdf`]);
-
-      users[req.user].files.push(`/outputs/${id}.pdf`);
-
-      jobs[id] = {
-        status: "done",
-        url: `/outputs/${id}.pdf`
-      };
-
-    } catch (e) {
-      jobs[id] = { status: "error", message: e };
+app.post("/merge", upload.array("files"), async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.json({ error: true, message: "no files" });
     }
-  });
 
-  processQueue();
+    const id = Date.now();
+    const files = req.files.map(f => f.path);
 
-  res.json({ jobId: id });
+    const ok = await run("pdfunite", [
+      ...files,
+      `outputs/${id}.pdf`
+    ]);
+
+    if (!ok) {
+      return res.json({ error: true, message: "merge failed" });
+    }
+
+    res.json({
+      success: true,
+      url: `/outputs/${id}.pdf`
+    });
+
+  } catch {
+    res.json({ error: true });
+  }
 });
 
-// ================= STATUS =================
-app.get("/status/:id", (req, res) => {
-  res.json(jobs[req.params.id] || { status: "notfound" });
+// ================= CHECK =================
+app.get("/check-tools", async (req, res) => {
+  const a = await run("pdftoppm", ["-h"]);
+  const b = await run("pdfunite", ["-h"]);
+
+  if (a && b) {
+    res.send("✅ tools OK");
+  } else {
+    res.send("❌ tools missing");
+  }
 });
 
 // ================= TEST =================
-app.get("/test", (req, res) => {
-  res.send("✅ Server OK");
-});
-
-// ================= HOME =================
 app.get("/", (req, res) => {
-  res.send("🔥 PDFORGE ULTRA RUNNING");
+  res.send("🔥 PDF SERVER WORKING");
 });
 
 // ================= START =================
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log("🚀 Server running:", PORT);
+  console.log("🚀 Running on port", PORT);
 });
