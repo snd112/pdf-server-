@@ -1,9 +1,7 @@
 FROM node:18
 
 # تثبيت أدوات PDF
-RUN apt-get update && apt-get install -y \
-    poppler-utils \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y poppler-utils
 
 WORKDIR /app
 
