@@ -12,8 +12,8 @@ app.use(express.static("public"));
 const PORT = process.env.PORT || 3000;
 
 // API KEYS (حطهم في Railway Variables)
-const publicKey = process.env.PUBLIC_KEY;
-const secretKey = process.env.SECRET_KEY;
+const publicKey = process.env.ILOVEPDF_PUBLIC_KEY;
+const secretKey = process.env.ILOVEPDF_SECRET_KEY;
 
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public/index.html"));
