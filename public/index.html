@@ -2,20 +2,55 @@
 <html lang="ar">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>🔥 PDFORGE ULTRA</title>
+
 <style>
-body { background:#0b0f1a; color:#fff; font-family:sans-serif; text-align:center }
-button { width:90%; padding:15px; margin:8px; border:none; border-radius:10px; background:#6c5ce7; color:#fff; font-size:16px }
-input { margin:10px }
+body {
+  background: #0f172a;
+  color: white;
+  font-family: Arial;
+  text-align: center;
+}
+
+h1 {
+  margin-top: 20px;
+}
+
+input {
+  margin: 20px;
+}
+
+button {
+  width: 90%;
+  padding: 15px;
+  margin: 8px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(45deg,#7c3aed,#6366f1);
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+button:hover {
+  opacity: 0.8;
+}
+
+#result {
+  margin-top: 20px;
+}
 </style>
 </head>
+
 <body>
 
 <h1>🔥 PDFORGE ULTRA</h1>
 
-<input type="file" id="file" multiple>
+<input type="file" id="files" multiple>
 
 <button onclick="run('merge')">دمج PDF</button>
+<button onclick="run('split')">تقسيم PDF</button>
 <button onclick="run('compress')">ضغط PDF</button>
 <button onclick="run('pdf-to-word')">PDF → Word</button>
 <button onclick="run('word-to-pdf')">Word → PDF</button>
@@ -27,34 +62,46 @@ input { margin:10px }
 <button onclick="run('jpg-to-pdf')">JPG → PDF</button>
 <button onclick="run('protect')">حماية PDF</button>
 <button onclick="run('unlock')">فك حماية PDF</button>
+<button onclick="run('rotate')">تدوير PDF</button>
+<button onclick="run('watermark')">علامة مائية</button>
 <button onclick="run('ocr')">OCR</button>
 
+<div id="result"></div>
+
 <script>
-async function run(tool) {
-  const fileInput = document.getElementById("file");
-  const files = fileInput.files;
+async function run(endpoint) {
+  const files = document.getElementById("files").files;
 
-  if (!files.length) return alert("اختار ملف");
-
-  const form = new FormData();
-
-  if (tool === "merge") {
-    for (let f of files) form.append("files", f);
-  } else {
-    form.append("file", files[0]);
+  if (!files.length) {
+    alert("اختار ملف الأول");
+    return;
   }
 
-  const res = await fetch("/" + tool, {
-    method: "POST",
-    body: form
-  });
+  const formData = new FormData();
 
-  const data = await res.json();
+  for (let file of files) {
+    formData.append("files", file);
+  }
 
-  if (data.url) {
-    window.open(data.url);
-  } else {
-    alert("فشل");
+  document.getElementById("result").innerHTML = "⏳ جاري المعالجة...";
+
+  try {
+    const res = await fetch("/" + endpoint, {
+      method: "POST",
+      body: formData
+    });
+
+    const data = await res.json();
+
+    if (data.url) {
+      document.getElementById("result").innerHTML =
+        `<a href="${data.url}" target="_blank">⬇️ تحميل الملف</a>`;
+    } else {
+      document.getElementById("result").innerHTML = "❌ حصل خطأ";
+    }
+
+  } catch (err) {
+    document.getElementById("result").innerHTML = "❌ فشل الاتصال بالسيرفر";
   }
 }
 </script>
