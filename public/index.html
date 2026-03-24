@@ -2,71 +2,71 @@
 <html lang="ar">
 <head>
 <meta charset="UTF-8">
-<title>PDFORGE ULTRA</title>
+<title>🔥 PDFORGE PRO</title>
+
 <style>
-body{background:#0b0f1a;color:white;text-align:center;font-family:sans-serif}
-button{width:90%;padding:12px;margin:5px;border:none;border-radius:8px;background:#6c5ce7;color:white}
+body{background:#0f172a;color:#fff;font-family:sans-serif;text-align:center}
+h1{margin:20px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px}
+button{padding:15px;border:none;border-radius:12px;background:#7c3aed;color:#fff;font-size:14px}
+input{margin:15px}
 </style>
+
 </head>
 <body>
 
-<h1>🔥 PDFORGE ULTRA</h1>
+<h1>🔥 PDFORGE PRO</h1>
 
-<input type="file" id="file" multiple><br>
+<input type="file" id="file" multiple>
 
-<button onclick="run('/merge',true)">دمج PDF</button>
+<div class="grid">
+
+<button onclick="run('/merge')">دمج PDF</button>
 <button onclick="run('/split')">تقسيم PDF</button>
 <button onclick="run('/compress')">ضغط PDF</button>
 
 <button onclick="run('/pdf-to-word')">PDF → Word</button>
+<button onclick="run('/pdf-to-excel')">PDF → Excel</button>
+<button onclick="run('/pdf-to-ppt')">PDF → PPT</button>
+
 <button onclick="run('/word-to-pdf')">Word → PDF</button>
 
-<button onclick="run('/pdf-to-ppt')">PDF → PPT</button>
-<button onclick="run('/ppt-to-pdf')">PPT → PDF</button>
-
-<button onclick="run('/pdf-to-excel')">PDF → Excel</button>
-<button onclick="run('/excel-to-pdf')">Excel → PDF</button>
-
 <button onclick="run('/pdf-to-jpg')">PDF → JPG</button>
-<button onclick="run('/jpg-to-pdf',true)">JPG → PDF</button>
-
-<button onclick="run('/protect')">حماية PDF</button>
-<button onclick="run('/unlock')">فك الحماية</button>
+<button onclick="run('/jpg-to-pdf')">JPG → PDF</button>
 
 <button onclick="run('/ocr')">OCR</button>
 
-<p id="status"></p>
+<button onclick="run('/protect')">حماية</button>
+<button onclick="run('/unlock')">فك الحماية</button>
+
+<button onclick="run('/rotate')">تدوير</button>
+<button onclick="run('/watermark')">Watermark</button>
+
+<button onclick="run('/html-to-pdf')">HTML → PDF</button>
+
+</div>
 
 <script>
-function files(){return document.getElementById("file").files}
+async function run(url){
+  const files = document.getElementById("file").files;
 
-async function run(url,multi=false){
-  const fd=new FormData()
-
-  if(multi){
-    for(let f of files()) fd.append("files",f)
-  }else{
-    if(!files()[0]){
-      alert("اختار ملف الاول");
-      return;
-    }
-    fd.append("file",files()[0])
+  if(files.length === 0){
+    alert("❗ اختار ملف");
+    return;
   }
 
-  document.getElementById("status").innerText="⏳ جاري التنفيذ..."
+  const fd = new FormData();
 
-  try{
-    const res=await fetch(url,{method:"POST",body:fd})
-    const data=await res.json()
+  for (let f of files) fd.append("files", f);
+  fd.append("file", files[0]);
 
-    if(data.url){
-      document.getElementById("status").innerHTML=
-        `<a href="${data.url}" target="_blank">⬇️ تحميل</a>`
-    }else{
-      document.getElementById("status").innerText="❌ فشل"
-    }
-  }catch{
-    document.getElementById("status").innerText="🔥 السيرفر مش بيرد"
+  const res = await fetch(url,{method:"POST",body:fd});
+  const data = await res.json();
+
+  if(data.url){
+    window.open(data.url);
+  }else{
+    alert("❌ فشل العملية");
   }
 }
 </script>
