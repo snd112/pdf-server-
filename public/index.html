@@ -2,199 +2,98 @@
 <html lang="ar">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDFORGE ULTRA</title>
-
 <style>
 body {
-  font-family: Arial;
-  background: #0b1220;
-  color: #fff;
+  background: #0b0f1a;
+  color: white;
+  font-family: sans-serif;
   text-align: center;
-  padding: 20px;
 }
-
 .container {
-  background: #111a2e;
-  padding: 20px;
-  border-radius: 15px;
-  max-width: 400px;
+  max-width: 500px;
   margin: auto;
-  box-shadow: 0 0 20px rgba(0,0,0,0.5);
 }
-
-select, input {
-  width: 100%;
-  padding: 10px;
-  margin: 10px 0;
-  border-radius: 10px;
-  border: none;
-}
-
 button {
   width: 100%;
-  padding: 12px;
-  margin: 10px 0;
-  border-radius: 10px;
+  padding: 15px;
+  margin: 5px;
   border: none;
-  background: #22c55e;
+  border-radius: 10px;
+  background: #6c5ce7;
   color: white;
   font-size: 16px;
-  cursor: pointer;
 }
-
-button:hover {
-  background: #16a34a;
-}
-
-#result a {
-  color: #4ade80;
+input {
+  margin: 10px;
 }
 </style>
-
 </head>
 <body>
 
+<div class="container">
 <h1>🔥 PDFORGE ULTRA</h1>
 
-<div class="container">
+<input type="file" id="file" multiple>
 
-<select id="tool">
-  <option value="merge">دمج PDF</option>
-  <option value="preview">معاينة PDF</option>
-</select>
+<button onclick="merge()">دمج PDF</button>
+<button onclick="split()">تقسيم PDF</button>
+<button onclick="compress()">ضغط PDF</button>
+<button onclick="pdfToJpg()">PDF → JPG</button>
+<button onclick="jpgToPdf()">JPG → PDF</button>
 
-<input type="file" id="fileInput" multiple>
-
-<button onclick="preview()">👁 Preview</button>
-<button onclick="runTool()">🚀 تنفيذ</button>
-
-<div id="status"></div>
-<div id="result"></div>
-
+<p id="status"></p>
 </div>
 
 <script>
+const API = "";
 
-let token = "";
-
-// 🔐 تسجيل دخول تلقائي
-async function login() {
-  const res = await fetch("/login", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({
-      email: "test@test.com",
-      password: "123456"
-    })
-  });
-
-  const data = await res.json();
-
-  if (!data.token) {
-    await fetch("/register", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({
-        email: "test@test.com",
-        password: "123456"
-      })
-    });
-    return login();
-  }
-
-  token = data.token;
-}
-
-login();
-
-
-// 👁 Preview
-async function preview() {
-  const file = document.getElementById("fileInput").files[0];
-  if (!file) return alert("اختار ملف");
-
-  const form = new FormData();
-  form.append("file", file);
-
-  document.getElementById("status").innerText = "⏳ جاري المعاينة...";
-
-  const res = await fetch("/preview", {
-    method: "POST",
-    body: form
-  });
-
-  const data = await res.json();
-
-  if (data.error) {
-    alert(data.message);
-    return;
-  }
-
-  document.getElementById("result").innerHTML =
-    `<img src="${data.url}" width="100%">`;
-}
-
-
-// 🚀 تشغيل الأدوات
-async function runTool() {
-  const tool = document.getElementById("tool").value;
-  const files = document.getElementById("fileInput").files;
-
-  if (files.length === 0) return alert("اختار ملفات");
-
-  const form = new FormData();
-
-  for (let f of files) {
-    form.append("files", f);
-  }
+async function send(url, files) {
+  const fd = new FormData();
+  files.forEach(f => fd.append("files", f));
 
   document.getElementById("status").innerText = "⏳ جاري التنفيذ...";
 
-  const res = await fetch(`/${tool}`, {
-    method: "POST",
-    headers: {
-      "Authorization": token
-    },
-    body: form
-  });
-
+  const res = await fetch(url, { method: "POST", body: fd });
   const data = await res.json();
 
-  if (data.error) {
-    alert(data.message);
-    return;
-  }
-
-  if (tool === "merge") {
-    checkStatus(data.jobId);
+  if (data.url) {
+    document.getElementById("status").innerHTML =
+      `<a href="${data.url}" target="_blank">⬇️ تحميل</a>`;
+  } else {
+    document.getElementById("status").innerText = "❌ فشل";
   }
 }
 
-
-// ⏳ متابعة الحالة
-async function checkStatus(id) {
-  const interval = setInterval(async () => {
-
-    const res = await fetch(`/status/${id}`);
-    const data = await res.json();
-
-    if (data.status === "done") {
-      clearInterval(interval);
-
-      document.getElementById("status").innerText = "✅ تم!";
-      document.getElementById("result").innerHTML =
-        `<a href="${data.url}" target="_blank">📥 تحميل الملف</a>`;
-    }
-
-    if (data.status === "error") {
-      clearInterval(interval);
-      alert("❌ حصل خطأ");
-    }
-
-  }, 2000);
+function getFiles() {
+  return Array.from(document.getElementById("file").files);
 }
 
+function merge() {
+  send("/merge", getFiles());
+}
+
+function jpgToPdf() {
+  send("/jpg-to-pdf", getFiles());
+}
+
+function split() {
+  const fd = new FormData();
+  fd.append("file", getFiles()[0]);
+  fetch("/split", { method: "POST", body: fd });
+}
+
+function compress() {
+  const fd = new FormData();
+  fd.append("file", getFiles()[0]);
+  fetch("/compress", { method: "POST", body: fd });
+}
+
+function pdfToJpg() {
+  const fd = new FormData();
+  fd.append("file", getFiles()[0]);
+  fetch("/pdf-to-jpg", { method: "POST", body: fd });
+}
 </script>
 
 </body>
