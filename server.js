@@ -9,9 +9,15 @@ const path = require("path");
 
 const app = express();
 
+// ===== MIDDLEWARE =====
 app.use(cors());
 app.use(express.json());
 app.use(compression());
+
+// 🔥 مهم: يخلي index يفتح
+app.use(express.static("public"));
+
+// تحميل الملفات الناتجة
 app.use("/outputs", express.static("outputs"));
 
 // ===== ENV =====
@@ -29,52 +35,37 @@ const upload = multer({
 });
 
 // ===== HELPER =====
-async function runILovePDF(task, files, extra = {}) {
+async function runILovePDF(tool, files = [], extra = {}) {
   try {
-    // 1. start task
     const start = await axios.post(
       "https://api.ilovepdf.com/v1/start",
       { public_key: PUBLIC_KEY },
-      { params: { tool: task } }
+      { params: { tool } }
     );
 
-    const { server, task: taskId } = start.data;
+    const { server, task } = start.data;
 
-    // 2. upload files
+    // upload files
     for (let file of files) {
       const form = new FormData();
       form.append("file", fs.createReadStream(file));
 
-      await axios.post(
-        `${server}/v1/upload`,
-        form,
-        {
-          headers: form.getHeaders(),
-          params: { task: taskId }
-        }
-      );
+      await axios.post(`${server}/v1/upload`, form, {
+        headers: form.getHeaders(),
+        params: { task }
+      });
     }
 
-    // 3. process
-    await axios.post(
-      `${server}/v1/process`,
-      extra,
-      {
-        params: {
-          task: taskId,
-          tool: task
-        }
-      }
-    );
+    // process
+    await axios.post(`${server}/v1/process`, extra, {
+      params: { task, tool }
+    });
 
-    // 4. download
-    const res = await axios.get(
-      `${server}/v1/download`,
-      {
-        params: { task: taskId },
-        responseType: "stream"
-      }
-    );
+    // download
+    const res = await axios.get(`${server}/v1/download`, {
+      params: { task },
+      responseType: "stream"
+    });
 
     const filename = `${Date.now()}_${Math.floor(Math.random()*10000)}.zip`;
     const filepath = path.join("outputs", filename);
@@ -92,142 +83,123 @@ async function runILovePDF(task, files, extra = {}) {
   }
 }
 
-// ================= TOOLS =================
+// ================= ROUTES =================
 
 // دمج
 app.post("/merge", upload.array("files"), async (req, res) => {
-  const result = await runILovePDF("merge", req.files.map(f => f.path));
-  if (!result) return res.json({ error: true });
-  res.json({ url: result });
+  const r = await runILovePDF("merge", req.files.map(f => f.path));
+  res.json(r ? { url: r } : { error: true });
 });
 
 // تقسيم
 app.post("/split", upload.array("files"), async (req, res) => {
-  const result = await runILovePDF("split", req.files.map(f => f.path));
-  if (!result) return res.json({ error: true });
-  res.json({ url: result });
+  const r = await runILovePDF("split", req.files.map(f => f.path));
+  res.json(r ? { url: r } : { error: true });
 });
 
 // ضغط
 app.post("/compress", upload.array("files"), async (req, res) => {
-  const result = await runILovePDF("compress", req.files.map(f => f.path));
-  if (!result) return res.json({ error: true });
-  res.json({ url: result });
+  const r = await runILovePDF("compress", req.files.map(f => f.path));
+  res.json(r ? { url: r } : { error: true });
 });
 
 // PDF → Word
 app.post("/pdf-to-word", upload.array("files"), async (req, res) => {
-  const result = await runILovePDF("pdfjpg", req.files.map(f => f.path));
-  if (!result) return res.json({ error: true });
-  res.json({ url: result });
+  const r = await runILovePDF("pdfword", req.files.map(f => f.path));
+  res.json(r ? { url: r } : { error: true });
 });
 
 // Word → PDF
 app.post("/word-to-pdf", upload.array("files"), async (req, res) => {
-  const result = await runILovePDF("officepdf", req.files.map(f => f.path));
-  if (!result) return res.json({ error: true });
-  res.json({ url: result });
+  const r = await runILovePDF("officepdf", req.files.map(f => f.path));
+  res.json(r ? { url: r } : { error: true });
 });
 
 // PDF → PPT
 app.post("/pdf-to-ppt", upload.array("files"), async (req, res) => {
-  const result = await runILovePDF("pdfjpg", req.files.map(f => f.path));
-  if (!result) return res.json({ error: true });
-  res.json({ url: result });
+  const r = await runILovePDF("pdfpowerpoint", req.files.map(f => f.path));
+  res.json(r ? { url: r } : { error: true });
 });
 
 // PPT → PDF
 app.post("/ppt-to-pdf", upload.array("files"), async (req, res) => {
-  const result = await runILovePDF("officepdf", req.files.map(f => f.path));
-  if (!result) return res.json({ error: true });
-  res.json({ url: result });
+  const r = await runILovePDF("officepdf", req.files.map(f => f.path));
+  res.json(r ? { url: r } : { error: true });
 });
 
 // PDF → Excel
 app.post("/pdf-to-excel", upload.array("files"), async (req, res) => {
-  const result = await runILovePDF("pdfexcel", req.files.map(f => f.path));
-  if (!result) return res.json({ error: true });
-  res.json({ url: result });
+  const r = await runILovePDF("pdfexcel", req.files.map(f => f.path));
+  res.json(r ? { url: r } : { error: true });
 });
 
 // Excel → PDF
 app.post("/excel-to-pdf", upload.array("files"), async (req, res) => {
-  const result = await runILovePDF("officepdf", req.files.map(f => f.path));
-  if (!result) return res.json({ error: true });
-  res.json({ url: result });
+  const r = await runILovePDF("officepdf", req.files.map(f => f.path));
+  res.json(r ? { url: r } : { error: true });
 });
 
 // PDF → JPG
 app.post("/pdf-to-jpg", upload.array("files"), async (req, res) => {
-  const result = await runILovePDF("pdfjpg", req.files.map(f => f.path));
-  if (!result) return res.json({ error: true });
-  res.json({ url: result });
+  const r = await runILovePDF("pdfjpg", req.files.map(f => f.path));
+  res.json(r ? { url: r } : { error: true });
 });
 
 // JPG → PDF
 app.post("/jpg-to-pdf", upload.array("files"), async (req, res) => {
-  const result = await runILovePDF("imagepdf", req.files.map(f => f.path));
-  if (!result) return res.json({ error: true });
-  res.json({ url: result });
+  const r = await runILovePDF("imagepdf", req.files.map(f => f.path));
+  res.json(r ? { url: r } : { error: true });
 });
 
 // حماية
 app.post("/protect", upload.array("files"), async (req, res) => {
-  const result = await runILovePDF("protect", req.files.map(f => f.path), {
+  const r = await runILovePDF("protect", req.files.map(f => f.path), {
     password: "123456"
   });
-  if (!result) return res.json({ error: true });
-  res.json({ url: result });
+  res.json(r ? { url: r } : { error: true });
 });
 
-// فتح
+// فك حماية
 app.post("/unlock", upload.array("files"), async (req, res) => {
-  const result = await runILovePDF("unlock", req.files.map(f => f.path));
-  if (!result) return res.json({ error: true });
-  res.json({ url: result });
+  const r = await runILovePDF("unlock", req.files.map(f => f.path));
+  res.json(r ? { url: r } : { error: true });
 });
 
 // تدوير
 app.post("/rotate", upload.array("files"), async (req, res) => {
-  const result = await runILovePDF("rotate", req.files.map(f => f.path));
-  if (!result) return res.json({ error: true });
-  res.json({ url: result });
+  const r = await runILovePDF("rotate", req.files.map(f => f.path));
+  res.json(r ? { url: r } : { error: true });
 });
 
-// watermark
+// علامة مائية
 app.post("/watermark", upload.array("files"), async (req, res) => {
-  const result = await runILovePDF("watermark", req.files.map(f => f.path), {
+  const r = await runILovePDF("watermark", req.files.map(f => f.path), {
     text: "PDFORGE"
   });
-  if (!result) return res.json({ error: true });
-  res.json({ url: result });
+  res.json(r ? { url: r } : { error: true });
 });
 
 // HTML → PDF
 app.post("/html-to-pdf", async (req, res) => {
   const { url } = req.body;
-
-  const result = await runILovePDF("htmlpdf", [], { url });
-  if (!result) return res.json({ error: true });
-
-  res.json({ url: result });
+  const r = await runILovePDF("htmlpdf", [], { url });
+  res.json(r ? { url: r } : { error: true });
 });
 
 // OCR
 app.post("/ocr", upload.array("files"), async (req, res) => {
-  const result = await runILovePDF("ocr", req.files.map(f => f.path));
-  if (!result) return res.json({ error: true });
-  res.json({ url: result });
+  const r = await runILovePDF("ocr", req.files.map(f => f.path));
+  res.json(r ? { url: r } : { error: true });
 });
 
-// ================= ROOT =================
+// ===== ROOT (لو مفيش index) =====
 app.get("/", (req, res) => {
-  res.send("🔥 PDFORGE ULTRA API WORKING");
+  res.sendFile(path.join(__dirname, "public/index.html"));
 });
 
-// ================= START =================
+// ===== START =====
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log("🚀 Server running on", PORT);
+  console.log("🚀 Running on", PORT);
 });
