@@ -16,7 +16,6 @@ app.use("/outputs", express.static("outputs"));
 
 const SECRET = "pdf-secret";
 const users = {};
-const jobs = {};
 
 // إنشاء الفولدرات
 if (!fs.existsSync("uploads")) fs.mkdirSync("uploads");
@@ -42,7 +41,7 @@ function run(cmd, args) {
     p.on("close", (code) => {
       if (code !== 0) {
         console.log("❌ ERROR:", error);
-        return resolve(false); // 👈 مهم
+        return resolve(false);
       }
       resolve(true);
     });
@@ -104,7 +103,7 @@ app.post("/preview", upload.single("file"), async (req, res) => {
 
     res.json({ url: "/outputs/preview-1.jpg" });
 
-  } catch (e) {
+  } catch {
     res.json({ error: true, message: "server error" });
   }
 });
@@ -150,13 +149,13 @@ app.get("/check-tools", async (req, res) => {
   }
 });
 
-// ================= TEST =================
+// ================= HOME =================
 app.get("/", (req, res) => {
   res.send("🔥 PDF SERVER WORKING");
 });
 
 // ================= START =================
-const PORT = process.env.PORT 
+const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log("🚀 Running on port", PORT);
