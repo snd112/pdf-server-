@@ -2,71 +2,59 @@
 <html lang="ar">
 <head>
 <meta charset="UTF-8">
-<title>🔥 PDFORGE PRO</title>
-
+<title>🔥 PDFORGE ULTRA</title>
 <style>
-body{background:#0f172a;color:#fff;font-family:sans-serif;text-align:center}
-h1{margin:20px}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px}
-button{padding:15px;border:none;border-radius:12px;background:#7c3aed;color:#fff;font-size:14px}
-input{margin:15px}
+body { background:#0b0f1a; color:#fff; font-family:sans-serif; text-align:center }
+button { width:90%; padding:15px; margin:8px; border:none; border-radius:10px; background:#6c5ce7; color:#fff; font-size:16px }
+input { margin:10px }
 </style>
-
 </head>
 <body>
 
-<h1>🔥 PDFORGE PRO</h1>
+<h1>🔥 PDFORGE ULTRA</h1>
 
 <input type="file" id="file" multiple>
 
-<div class="grid">
-
-<button onclick="run('/merge')">دمج PDF</button>
-<button onclick="run('/split')">تقسيم PDF</button>
-<button onclick="run('/compress')">ضغط PDF</button>
-
-<button onclick="run('/pdf-to-word')">PDF → Word</button>
-<button onclick="run('/pdf-to-excel')">PDF → Excel</button>
-<button onclick="run('/pdf-to-ppt')">PDF → PPT</button>
-
-<button onclick="run('/word-to-pdf')">Word → PDF</button>
-
-<button onclick="run('/pdf-to-jpg')">PDF → JPG</button>
-<button onclick="run('/jpg-to-pdf')">JPG → PDF</button>
-
-<button onclick="run('/ocr')">OCR</button>
-
-<button onclick="run('/protect')">حماية</button>
-<button onclick="run('/unlock')">فك الحماية</button>
-
-<button onclick="run('/rotate')">تدوير</button>
-<button onclick="run('/watermark')">Watermark</button>
-
-<button onclick="run('/html-to-pdf')">HTML → PDF</button>
-
-</div>
+<button onclick="run('merge')">دمج PDF</button>
+<button onclick="run('compress')">ضغط PDF</button>
+<button onclick="run('pdf-to-word')">PDF → Word</button>
+<button onclick="run('word-to-pdf')">Word → PDF</button>
+<button onclick="run('pdf-to-ppt')">PDF → PPT</button>
+<button onclick="run('ppt-to-pdf')">PPT → PDF</button>
+<button onclick="run('pdf-to-excel')">PDF → Excel</button>
+<button onclick="run('excel-to-pdf')">Excel → PDF</button>
+<button onclick="run('pdf-to-jpg')">PDF → JPG</button>
+<button onclick="run('jpg-to-pdf')">JPG → PDF</button>
+<button onclick="run('protect')">حماية PDF</button>
+<button onclick="run('unlock')">فك حماية PDF</button>
+<button onclick="run('ocr')">OCR</button>
 
 <script>
-async function run(url){
-  const files = document.getElementById("file").files;
+async function run(tool) {
+  const fileInput = document.getElementById("file");
+  const files = fileInput.files;
 
-  if(files.length === 0){
-    alert("❗ اختار ملف");
-    return;
+  if (!files.length) return alert("اختار ملف");
+
+  const form = new FormData();
+
+  if (tool === "merge") {
+    for (let f of files) form.append("files", f);
+  } else {
+    form.append("file", files[0]);
   }
 
-  const fd = new FormData();
+  const res = await fetch("/" + tool, {
+    method: "POST",
+    body: form
+  });
 
-  for (let f of files) fd.append("files", f);
-  fd.append("file", files[0]);
-
-  const res = await fetch(url,{method:"POST",body:fd});
   const data = await res.json();
 
-  if(data.url){
+  if (data.url) {
     window.open(data.url);
-  }else{
-    alert("❌ فشل العملية");
+  } else {
+    alert("فشل");
   }
 }
 </script>
