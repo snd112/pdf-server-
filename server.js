@@ -2,7 +2,6 @@ const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
 const compression = require("compression");
-const jwt = require("jsonwebtoken");
 const fs = require("fs");
 const { spawn } = require("child_process");
 
@@ -14,148 +13,142 @@ app.use(compression());
 app.use(express.static("public"));
 app.use("/outputs", express.static("outputs"));
 
-const SECRET = "pdf-secret";
-const users = {};
-
-// إنشاء الفولدرات
-if (!fs.existsSync("uploads")) fs.mkdirSync("uploads");
-if (!fs.existsSync("outputs")) fs.mkdirSync("outputs");
-
-// رفع الملفات
-const upload = multer({
-  dest: "uploads/",
-  limits: { fileSize: 20 * 1024 * 1024 }
+// إنشاء فولدرات
+["uploads", "outputs"].forEach(f => {
+  if (!fs.existsSync(f)) fs.mkdirSync(f);
 });
 
-// ================= RUN CMD =================
+// رفع ملفات
+const upload = multer({
+  dest: "uploads/",
+  limits: { fileSize: 50 * 1024 * 1024 }
+});
+
+// تشغيل أوامر بسرعة
 function run(cmd, args) {
   return new Promise((resolve) => {
     const p = spawn(cmd, args);
 
-    let error = "";
-
-    p.stderr.on("data", (data) => {
-      error += data.toString();
-    });
-
     p.on("close", (code) => {
-      if (code !== 0) {
-        console.log("❌ ERROR:", error);
-        return resolve(false);
-      }
-      resolve(true);
+      resolve(code === 0);
     });
   });
 }
 
-// ================= AUTH =================
-function auth(req, res, next) {
-  try {
-    const token = req.headers.authorization;
-    const data = jwt.verify(token, SECRET);
-    req.user = data.email;
-    next();
-  } catch {
-    res.status(401).json({ error: "unauthorized" });
-  }
-}
-
-// ================= AUTH ROUTES =================
-app.post("/register", (req, res) => {
-  const { email, password } = req.body;
-
-  if (!email || !password)
-    return res.json({ error: "missing data" });
-
-  if (users[email]) return res.json({ error: "exists" });
-
-  users[email] = { password, files: [] };
-
-  res.json({ success: true });
-});
-
-app.post("/login", (req, res) => {
-  const { email, password } = req.body;
-
-  if (!users[email] || users[email].password !== password)
-    return res.json({ error: "invalid" });
-
-  const token = jwt.sign({ email }, SECRET);
-  res.json({ token });
-});
-
-// ================= PREVIEW =================
-app.post("/preview", upload.single("file"), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.json({ error: true, message: "❌ no file" });
-    }
-
-    const ok = await run("pdftoppm", [
-      "-jpeg",
-      req.file.path,
-      "outputs/preview"
-    ]);
-
-    if (!ok) {
-      return res.json({ error: true, message: "preview failed" });
-    }
-
-    res.json({ url: "/outputs/preview-1.jpg" });
-
-  } catch {
-    res.json({ error: true, message: "server error" });
-  }
-});
-
 // ================= MERGE =================
 app.post("/merge", upload.array("files"), async (req, res) => {
-  try {
-    if (!req.files || req.files.length === 0) {
-      return res.json({ error: true, message: "no files" });
-    }
+  const id = Date.now();
+  const files = req.files.map(f => f.path);
 
-    const id = Date.now();
-    const files = req.files.map(f => f.path);
+  const ok = await run("pdfunite", [...files, `outputs/${id}.pdf`]);
 
-    const ok = await run("pdfunite", [
-      ...files,
-      `outputs/${id}.pdf`
-    ]);
+  if (!ok) return res.json({ error: "merge failed" });
 
-    if (!ok) {
-      return res.json({ error: true, message: "merge failed" });
-    }
-
-    res.json({
-      success: true,
-      url: `/outputs/${id}.pdf`
-    });
-
-  } catch {
-    res.json({ error: true });
-  }
+  res.json({ url: `/outputs/${id}.pdf` });
 });
 
-// ================= CHECK =================
-app.get("/check-tools", async (req, res) => {
-  const a = await run("pdftoppm", ["-h"]);
-  const b = await run("pdfunite", ["-h"]);
+// ================= SPLIT =================
+app.post("/split", upload.single("file"), async (req, res) => {
+  const id = Date.now();
 
-  if (a && b) {
-    res.send("✅ tools OK");
-  } else {
-    res.send("❌ tools missing");
-  }
+  const ok = await run("pdfseparate", [
+    req.file.path,
+    `outputs/${id}-%d.pdf`
+  ]);
+
+  if (!ok) return res.json({ error: "split failed" });
+
+  res.json({ success: true, prefix: `/outputs/${id}-` });
 });
 
-// ================= HOME =================
+// ================= COMPRESS =================
+app.post("/compress", upload.single("file"), async (req, res) => {
+  const id = Date.now();
+
+  const ok = await run("gs", [
+    "-sDEVICE=pdfwrite",
+    "-dCompatibilityLevel=1.4",
+    "-dPDFSETTINGS=/ebook",
+    "-dNOPAUSE",
+    "-dQUIET",
+    "-dBATCH",
+    `-sOutputFile=outputs/${id}.pdf`,
+    req.file.path
+  ]);
+
+  if (!ok) return res.json({ error: "compress failed" });
+
+  res.json({ url: `/outputs/${id}.pdf` });
+});
+
+// ================= PDF → JPG =================
+app.post("/pdf-to-jpg", upload.single("file"), async (req, res) => {
+  const id = Date.now();
+
+  const ok = await run("pdftoppm", [
+    "-jpeg",
+    req.file.path,
+    `outputs/${id}`
+  ]);
+
+  if (!ok) return res.json({ error: "convert failed" });
+
+  res.json({ prefix: `/outputs/${id}` });
+});
+
+// ================= JPG → PDF =================
+app.post("/jpg-to-pdf", upload.array("files"), async (req, res) => {
+  const id = Date.now();
+  const imgs = req.files.map(f => f.path);
+
+  const ok = await run("img2pdf", [...imgs, "-o", `outputs/${id}.pdf`]);
+
+  if (!ok) return res.json({ error: "convert failed" });
+
+  res.json({ url: `/outputs/${id}.pdf` });
+});
+
+// ================= ROTATE =================
+app.post("/rotate", upload.single("file"), async (req, res) => {
+  const id = Date.now();
+
+  const ok = await run("pdftk", [
+    req.file.path,
+    "cat",
+    "1-endR",
+    "output",
+    `outputs/${id}.pdf`
+  ]);
+
+  if (!ok) return res.json({ error: "rotate failed" });
+
+  res.json({ url: `/outputs/${id}.pdf` });
+});
+
+// ================= WATERMARK =================
+app.post("/watermark", upload.single("file"), async (req, res) => {
+  const id = Date.now();
+
+  const ok = await run("pdftk", [
+    req.file.path,
+    "background",
+    "watermark.pdf",
+    "output",
+    `outputs/${id}.pdf`
+  ]);
+
+  if (!ok) return res.json({ error: "watermark failed" });
+
+  res.json({ url: `/outputs/${id}.pdf` });
+});
+
+// ================= TEST =================
 app.get("/", (req, res) => {
-  res.send("🔥 PDF SERVER WORKING");
+  res.send("🔥 PDF SERVER ULTRA WORKING");
 });
 
 // ================= START =================
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log("🚀 Running on port", PORT);
