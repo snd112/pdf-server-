@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <title>PDFORGE ULTRA</title>
 <style>
-body { background:#0b0f1a;color:white;font-family:sans-serif;text-align:center }
-button { width:90%;padding:12px;margin:5px;border-radius:8px;border:none;background:#6c5ce7;color:white }
+body{background:#0b0f1a;color:white;text-align:center;font-family:sans-serif}
+button{width:90%;padding:12px;margin:5px;border:none;border-radius:8px;background:#6c5ce7;color:white}
 </style>
 </head>
 <body>
@@ -42,21 +42,31 @@ function files(){return document.getElementById("file").files}
 
 async function run(url,multi=false){
   const fd=new FormData()
+
   if(multi){
     for(let f of files()) fd.append("files",f)
   }else{
+    if(!files()[0]){
+      alert("اختار ملف الاول");
+      return;
+    }
     fd.append("file",files()[0])
   }
 
-  status.innerText="⏳ جاري التنفيذ..."
+  document.getElementById("status").innerText="⏳ جاري التنفيذ..."
 
-  const res=await fetch(url,{method:"POST",body:fd})
-  const data=await res.json()
+  try{
+    const res=await fetch(url,{method:"POST",body:fd})
+    const data=await res.json()
 
-  if(data.url){
-    status.innerHTML=`<a href="${data.url}" target="_blank">⬇️ تحميل</a>`
-  }else{
-    status.innerText="❌ فشل"
+    if(data.url){
+      document.getElementById("status").innerHTML=
+        `<a href="${data.url}" target="_blank">⬇️ تحميل</a>`
+    }else{
+      document.getElementById("status").innerText="❌ فشل"
+    }
+  }catch{
+    document.getElementById("status").innerText="🔥 السيرفر مش بيرد"
   }
 }
 </script>
