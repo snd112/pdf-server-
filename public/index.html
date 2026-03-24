@@ -4,95 +4,60 @@
 <meta charset="UTF-8">
 <title>PDFORGE ULTRA</title>
 <style>
-body {
-  background: #0b0f1a;
-  color: white;
-  font-family: sans-serif;
-  text-align: center;
-}
-.container {
-  max-width: 500px;
-  margin: auto;
-}
-button {
-  width: 100%;
-  padding: 15px;
-  margin: 5px;
-  border: none;
-  border-radius: 10px;
-  background: #6c5ce7;
-  color: white;
-  font-size: 16px;
-}
-input {
-  margin: 10px;
-}
+body { background:#0b0f1a;color:white;font-family:sans-serif;text-align:center }
+button { width:90%;padding:12px;margin:5px;border-radius:8px;border:none;background:#6c5ce7;color:white }
 </style>
 </head>
 <body>
 
-<div class="container">
 <h1>🔥 PDFORGE ULTRA</h1>
 
-<input type="file" id="file" multiple>
+<input type="file" id="file" multiple><br>
 
-<button onclick="merge()">دمج PDF</button>
-<button onclick="split()">تقسيم PDF</button>
-<button onclick="compress()">ضغط PDF</button>
-<button onclick="pdfToJpg()">PDF → JPG</button>
-<button onclick="jpgToPdf()">JPG → PDF</button>
+<button onclick="run('/merge',true)">دمج PDF</button>
+<button onclick="run('/split')">تقسيم PDF</button>
+<button onclick="run('/compress')">ضغط PDF</button>
+
+<button onclick="run('/pdf-to-word')">PDF → Word</button>
+<button onclick="run('/word-to-pdf')">Word → PDF</button>
+
+<button onclick="run('/pdf-to-ppt')">PDF → PPT</button>
+<button onclick="run('/ppt-to-pdf')">PPT → PDF</button>
+
+<button onclick="run('/pdf-to-excel')">PDF → Excel</button>
+<button onclick="run('/excel-to-pdf')">Excel → PDF</button>
+
+<button onclick="run('/pdf-to-jpg')">PDF → JPG</button>
+<button onclick="run('/jpg-to-pdf',true)">JPG → PDF</button>
+
+<button onclick="run('/protect')">حماية PDF</button>
+<button onclick="run('/unlock')">فك الحماية</button>
+
+<button onclick="run('/ocr')">OCR</button>
 
 <p id="status"></p>
-</div>
 
 <script>
-const API = "";
+function files(){return document.getElementById("file").files}
 
-async function send(url, files) {
-  const fd = new FormData();
-  files.forEach(f => fd.append("files", f));
-
-  document.getElementById("status").innerText = "⏳ جاري التنفيذ...";
-
-  const res = await fetch(url, { method: "POST", body: fd });
-  const data = await res.json();
-
-  if (data.url) {
-    document.getElementById("status").innerHTML =
-      `<a href="${data.url}" target="_blank">⬇️ تحميل</a>`;
-  } else {
-    document.getElementById("status").innerText = "❌ فشل";
+async function run(url,multi=false){
+  const fd=new FormData()
+  if(multi){
+    for(let f of files()) fd.append("files",f)
+  }else{
+    fd.append("file",files()[0])
   }
-}
 
-function getFiles() {
-  return Array.from(document.getElementById("file").files);
-}
+  status.innerText="⏳ جاري التنفيذ..."
 
-function merge() {
-  send("/merge", getFiles());
-}
+  const res=await fetch(url,{method:"POST",body:fd})
+  const data=await res.json()
 
-function jpgToPdf() {
-  send("/jpg-to-pdf", getFiles());
-}
-
-function split() {
-  const fd = new FormData();
-  fd.append("file", getFiles()[0]);
-  fetch("/split", { method: "POST", body: fd });
-}
-
-function compress() {
-  const fd = new FormData();
-  fd.append("file", getFiles()[0]);
-  fetch("/compress", { method: "POST", body: fd });
-}
-
-function pdfToJpg() {
-  const fd = new FormData();
-  fd.append("file", getFiles()[0]);
-  fetch("/pdf-to-jpg", { method: "POST", body: fd });
+  if(data.url){
+    status.innerHTML=`<a href="${data.url}" target="_blank">⬇️ تحميل</a>`
+  }else{
+    status.innerText="❌ فشل"
+  }
 }
 </script>
 
