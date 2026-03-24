@@ -1,186 +1,131 @@
 const express = require("express");
 const multer = require("multer");
-const { spawn } = require("child_process");
+const cors = require("cors");
 const fs = require("fs");
-const path = require("path");
+const ILovePDFApi = require("ilovepdf-nodejs");
 
 const app = express();
-
+app.use(cors());
 app.use(express.static("public"));
 app.use("/outputs", express.static("outputs"));
 
-["uploads","outputs"].forEach(f=>{
-  if(!fs.existsSync(f)) fs.mkdirSync(f);
-});
+if (!fs.existsSync("uploads")) fs.mkdirSync("uploads");
+if (!fs.existsSync("outputs")) fs.mkdirSync("outputs");
 
 const upload = multer({ dest: "uploads/" });
 
-// تشغيل أوامر
-function run(cmd,args){
-  return new Promise(resolve=>{
-    const p = spawn(cmd,args);
-    let err="";
-    p.stderr.on("data",d=>err+=d.toString());
-    p.on("close",code=>{
-      if(code!==0){
-        console.log("❌",cmd,err);
-        return resolve(false);
-      }
-      resolve(true);
-    });
-  });
+const instance = new ILovePDFApi(
+  process.env.PDF_PUBLIC,
+  process.env.PDF_SECRET
+);
+
+// 🔥 تشغيل أي أداة
+async function runTask(taskName, files, res, ext = "pdf") {
+  try {
+    const task = instance.newTask(taskName);
+
+    await task.start();
+
+    if (Array.isArray(files)) {
+      for (let f of files) await task.addFile(f.path);
+    } else {
+      await task.addFile(files.path);
+    }
+
+    await task.process();
+
+    const data = await task.download();
+
+    const fileName = `outputs/${Date.now()}_${Math.floor(Math.random()*9999)}.${ext}`;
+    fs.writeFileSync(fileName, data);
+
+    res.json({ url: "/" + fileName });
+
+  } catch (e) {
+    console.log("❌ ERROR:", e);
+    res.json({ error: true });
+  }
 }
 
-// naming system
-function name(file){
-  return path.parse(file.originalname).name.replace(/\s+/g,"_");
-}
-function unique(ext){
-  return Date.now()+"_"+Math.floor(Math.random()*9999)+"."+ext;
-}
+// ================= الأدوات =================
 
-// ===== MERGE =====
-app.post("/merge", upload.array("files"), async (req,res)=>{
-  const out=unique("pdf");
-  const files=req.files.map(f=>f.path);
-  const ok=await run("pdfunite",[...files,`outputs/${out}`]);
-  res.json(ok?{url:`/outputs/${out}`}:{error:true});
+// دمج
+app.post("/merge", upload.array("files"), (req, res) =>
+  runTask("merge", req.files, res)
+);
+
+// تقسيم
+app.post("/split", upload.single("file"), (req, res) =>
+  runTask("split", req.file, res)
+);
+
+// ضغط
+app.post("/compress", upload.single("file"), (req, res) =>
+  runTask("compress", req.file, res)
+);
+
+// PDF → Word
+app.post("/pdf-to-word", upload.single("file"), (req, res) =>
+  runTask("pdfoffice", req.file, res, "docx")
+);
+
+// PDF → Excel
+app.post("/pdf-to-excel", upload.single("file"), (req, res) =>
+  runTask("pdfoffice", req.file, res, "xlsx")
+);
+
+// PDF → PPT
+app.post("/pdf-to-ppt", upload.single("file"), (req, res) =>
+  runTask("pdfoffice", req.file, res, "pptx")
+);
+
+// Word → PDF
+app.post("/word-to-pdf", upload.single("file"), (req, res) =>
+  runTask("officepdf", req.file, res)
+);
+
+// JPG → PDF
+app.post("/jpg-to-pdf", upload.array("files"), (req, res) =>
+  runTask("imagepdf", req.files, res)
+);
+
+// PDF → JPG
+app.post("/pdf-to-jpg", upload.single("file"), (req, res) =>
+  runTask("pdfjpg", req.file, res, "jpg")
+);
+
+// OCR
+app.post("/ocr", upload.single("file"), (req, res) =>
+  runTask("ocr", req.file, res)
+);
+
+// حماية
+app.post("/protect", upload.single("file"), (req, res) =>
+  runTask("protect", req.file, res)
+);
+
+// فك حماية
+app.post("/unlock", upload.single("file"), (req, res) =>
+  runTask("unlock", req.file, res)
+);
+
+// تدوير
+app.post("/rotate", upload.single("file"), (req, res) =>
+  runTask("rotate", req.file, res)
+);
+
+// علامة مائية
+app.post("/watermark", upload.single("file"), (req, res) =>
+  runTask("watermark", req.file, res)
+);
+
+// HTML → PDF
+app.post("/html-to-pdf", upload.single("file"), (req, res) =>
+  runTask("htmlpdf", req.file, res)
+);
+
+app.get("/", (req, res) => {
+  res.send("🔥 PDFORGE PRO RUNNING");
 });
 
-// ===== SPLIT =====
-app.post("/split", upload.single("file"), async (req,res)=>{
-  const id=Date.now();
-  const ok=await run("pdfseparate",[req.file.path,`outputs/${id}-%d.pdf`]);
-  res.json(ok?{url:`/outputs/${id}-1.pdf`}:{error:true});
-});
-
-// ===== COMPRESS =====
-app.post("/compress", upload.single("file"), async (req,res)=>{
-  const out=unique("pdf");
-  const ok=await run("gs",[
-    "-sDEVICE=pdfwrite",
-    "-dPDFSETTINGS=/ebook",
-    "-dNOPAUSE","-dQUIET","-dBATCH",
-    `-sOutputFile=outputs/${out}`,
-    req.file.path
-  ]);
-  res.json(ok?{url:`/outputs/${out}`}:{error:true});
-});
-
-// ===== WORD → PDF =====
-app.post("/word-to-pdf", upload.single("file"), async (req,res)=>{
-  const base=name(req.file);
-  const out=unique("pdf");
-
-  await run("libreoffice",["--headless","--convert-to","pdf",req.file.path,"--outdir","outputs"]);
-
-  const old=`outputs/${base}.pdf`;
-  if(fs.existsSync(old)) fs.renameSync(old,`outputs/${out}`);
-
-  res.json({url:`/outputs/${out}`});
-});
-
-// ===== PDF → WORD =====
-app.post("/pdf-to-word", upload.single("file"), async (req,res)=>{
-  const base=name(req.file);
-  const out=unique("docx");
-
-  await run("libreoffice",["--headless","--convert-to","docx",req.file.path,"--outdir","outputs"]);
-
-  const old=`outputs/${base}.docx`;
-  if(fs.existsSync(old)) fs.renameSync(old,`outputs/${out}`);
-
-  res.json({url:`/outputs/${out}`});
-});
-
-// ===== PPT → PDF =====
-app.post("/ppt-to-pdf", upload.single("file"), async (req,res)=>{
-  const base=name(req.file);
-  const out=unique("pdf");
-
-  await run("libreoffice",["--headless","--convert-to","pdf",req.file.path,"--outdir","outputs"]);
-
-  const old=`outputs/${base}.pdf`;
-  if(fs.existsSync(old)) fs.renameSync(old,`outputs/${out}`);
-
-  res.json({url:`/outputs/${out}`});
-});
-
-// ===== PDF → PPT =====
-app.post("/pdf-to-ppt", upload.single("file"), async (req,res)=>{
-  const base=name(req.file);
-  const out=unique("pptx");
-
-  await run("libreoffice",["--headless","--convert-to","pptx",req.file.path,"--outdir","outputs"]);
-
-  const old=`outputs/${base}.pptx`;
-  if(fs.existsSync(old)) fs.renameSync(old,`outputs/${out}`);
-
-  res.json({url:`/outputs/${out}`});
-});
-
-// ===== EXCEL → PDF =====
-app.post("/excel-to-pdf", upload.single("file"), async (req,res)=>{
-  const base=name(req.file);
-  const out=unique("pdf");
-
-  await run("libreoffice",["--headless","--convert-to","pdf",req.file.path,"--outdir","outputs"]);
-
-  const old=`outputs/${base}.pdf`;
-  if(fs.existsSync(old)) fs.renameSync(old,`outputs/${out}`);
-
-  res.json({url:`/outputs/${out}`});
-});
-
-// ===== PDF → EXCEL =====
-app.post("/pdf-to-excel", upload.single("file"), async (req,res)=>{
-  const base=name(req.file);
-  const out=unique("xlsx");
-
-  await run("libreoffice",["--headless","--convert-to","xlsx",req.file.path,"--outdir","outputs"]);
-
-  const old=`outputs/${base}.xlsx`;
-  if(fs.existsSync(old)) fs.renameSync(old,`outputs/${out}`);
-
-  res.json({url:`/outputs/${out}`});
-});
-
-// ===== PDF → JPG =====
-app.post("/pdf-to-jpg", upload.single("file"), async (req,res)=>{
-  const id=Date.now();
-  await run("pdftoppm",["-jpeg",req.file.path,`outputs/${id}`]);
-  res.json({url:`/outputs/${id}-1.jpg`});
-});
-
-// ===== JPG → PDF =====
-app.post("/jpg-to-pdf", upload.array("files"), async (req,res)=>{
-  const out=unique("pdf");
-  const imgs=req.files.map(f=>f.path);
-  await run("img2pdf",[...imgs,"-o",`outputs/${out}`]);
-  res.json({url:`/outputs/${out}`});
-});
-
-// ===== PROTECT =====
-app.post("/protect", upload.single("file"), async (req,res)=>{
-  const out=unique("pdf");
-  await run("qpdf",["--encrypt","1234","1234","256","--",req.file.path,`outputs/${out}`]);
-  res.json({url:`/outputs/${out}`});
-});
-
-// ===== UNLOCK =====
-app.post("/unlock", upload.single("file"), async (req,res)=>{
-  const out=unique("pdf");
-  await run("qpdf",["--decrypt",req.file.path,`outputs/${out}`]);
-  res.json({url:`/outputs/${out}`});
-});
-
-// ===== OCR =====
-app.post("/ocr", upload.single("file"), async (req,res)=>{
-  const out=unique("pdf");
-  await run("tesseract",[req.file.path,`outputs/${out.replace(".pdf","")}`,"pdf"]);
-  res.json({url:`/outputs/${out}`});
-});
-
-// ===== START =====
-const PORT=process.env.PORT||8080;
-app.listen(PORT,"0.0.0.0",()=>console.log("🚀",PORT));
+app.listen(process.env.PORT || 8080, "0.0.0.0");
