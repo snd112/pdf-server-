@@ -30,7 +30,7 @@ app.post("/api/process", async (req, res) => {
 
     await file.mv(filePath);
 
-    const instance = new ILovePDFApi(publicKey, secretKey);
+    const instance = new ILovePDFApi(ILOVEPDF_PUBLIC_KEY, ILOVEPDF_SECRET_KEY);
     const task = instance.newTask(tool);
 
     await task.start();
