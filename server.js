@@ -11,9 +11,12 @@ app.use(express.static("public"));
 
 const PORT = process.env.PORT || 3000;
 
-// API KEYS (حطهم في Railway Variables)
 const publicKey = process.env.ILOVEPDF_PUBLIC_KEY;
 const secretKey = process.env.ILOVEPDF_SECRET_KEY;
+
+if (!fs.existsSync("./output")) {
+  fs.mkdirSync("./output");
+}
 
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public/index.html"));
@@ -23,14 +26,16 @@ app.post("/api/process", async (req, res) => {
   try {
     const tool = req.body.tool;
 
-    if (!req.files) return res.status(400).send("No file");
+    if (!req.files || !req.files.file) {
+      return res.status(400).send("No file");
+    }
 
-    const file = req.files.files;
+    const file = req.files.file;
     const filePath = "./temp_" + Date.now() + "_" + file.name;
 
     await file.mv(filePath);
 
-    const instance = new ILovePDFApi(ILOVEPDF_PUBLIC_KEY, ILOVEPDF_SECRET_KEY);
+    const instance = new ILovePDFApi(publicKey, secretKey);
     const task = instance.newTask(tool);
 
     await task.start();
@@ -42,12 +47,11 @@ app.post("/api/process", async (req, res) => {
 
     res.download("./output/" + outputFile);
 
-    // تنظيف
     fs.unlinkSync(filePath);
     fs.unlinkSync("./output/" + outputFile);
 
   } catch (err) {
-    console.log(err);
+    console.log("🔥 ERROR:", err.response?.data || err.message);
     res.status(500).send("❌ حصل خطأ");
   }
 });
