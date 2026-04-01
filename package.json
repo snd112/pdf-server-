@@ -1,14 +1,26 @@
 {
-  "name": "pdforge-ultra",
-  "version": "1.0.0",
+  "name": "pdforge-ultra-pro",
+  "version": "2.0.0",
+  "description": "🔥 PDFORGE ULTRA PRO - 20+ PDF Tools باستخدام iLovePDF API",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node server.js"
   },
+  "keywords": [
+    "pdf",
+    "ilovepdf",
+    "merge",
+    "compress",
+    "convert",
+    "ocr",
+    "pdf-tools"
+  ],
+  "author": "Ahmed",
+  "license": "MIT",
   "dependencies": {
-    "axios": "^1.6.0",
     "express": "^4.18.2",
     "express-fileupload": "^1.4.0",
-    "ilovepdf-nodejs": "^1.0.0"
+    "ilovepdf-nodejs": "^1.0.4"
   }
 }
