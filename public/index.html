@@ -30,6 +30,11 @@ button {
   background:linear-gradient(45deg,#6a5cff,#8f44fd);
   color:white;
   font-size:16px;
+  cursor:pointer;
+}
+
+input {
+  margin-top:20px;
 }
 </style>
 </head>
@@ -60,11 +65,11 @@ button {
 <button onclick="run('pdfjpg')">PDF → JPG</button>
 <button onclick="run('jpgpdf')">JPG → PDF</button>
 
-<button onclick="run('rotate')">تدوير</button>
+<button onclick="run('rotate')">تدوير PDF</button>
 <button onclick="run('watermark')">علامة مائية</button>
 
-<button onclick="run('protect')">حماية</button>
-<button onclick="run('unlock')">فك حماية</button>
+<button onclick="run('protect')">حماية PDF</button>
+<button onclick="run('unlock')">فك حماية PDF</button>
 
 <button onclick="run('ocr')">OCR</button>
 <button onclick="run('htmlpdf')">HTML → PDF</button>
@@ -79,7 +84,7 @@ async function run(tool){
   const input = document.getElementById("files");
 
   if(!input.files.length){
-    alert("اختار ملف");
+    alert("❌ اختار ملف الأول");
     return;
   }
 
@@ -97,18 +102,23 @@ async function run(tool){
       body:formData
     });
 
-    if(!res.ok) throw new Error();
+    // 🔥 أهم تعديل: عرض الخطأ الحقيقي
+    if (!res.ok) {
+      const text = await res.text();
+      alert("❌ ERROR:\n" + text);
+      return;
+    }
 
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
 
     const a = document.createElement("a");
     a.href = url;
-    a.download = "result";
+    a.download = "PDFORGE_RESULT";
     a.click();
 
-  }catch{
-    alert("❌ حصل خطأ");
+  }catch(err){
+    alert("❌ Network Error أو السيرفر واقع");
   }
 }
 </script>
