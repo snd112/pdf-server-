@@ -2,7 +2,7 @@
 <html lang="ar">
 <head>
 <meta charset="UTF-8">
-<title>🔥 PDFORGE ULTRA</title>
+<title>🔥 PDFORGE ULTRA PRO</title>
 
 <style>
 body {
@@ -16,43 +16,63 @@ h1 {
   margin-top:20px;
 }
 
+.grid {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+  padding:10px;
+}
+
 button {
-  width:90%;
-  margin:10px;
   padding:15px;
   border:none;
   border-radius:15px;
   background:linear-gradient(45deg,#6a5cff,#8f44fd);
   color:white;
-  font-size:18px;
-  cursor:pointer;
-}
-
-button:hover{
-  opacity:0.8;
+  font-size:16px;
 }
 </style>
 </head>
 
 <body>
 
-<h1>🔥 PDFORGE ULTRA</h1>
+<h1>🔥 PDFORGE ULTRA PRO</h1>
 
 <input type="file" id="files" multiple>
 
-<br><br>
+<div class="grid">
 
 <button onclick="run('merge')">دمج PDF</button>
 <button onclick="run('split')">تقسيم PDF</button>
+
 <button onclick="run('compress')">ضغط PDF</button>
-<button onclick="run('pdfjpg')">PDF → JPG</button>
-<button onclick="run('imagepdf')">JPG → PDF</button>
-<button onclick="run('officepdf')">Word/PPT/Excel → PDF</button>
+<button onclick="run('repair')">إصلاح PDF</button>
+
 <button onclick="run('pdfoffice')">PDF → Word</button>
+<button onclick="run('officepdf')">Word → PDF</button>
+
 <button onclick="run('pdfpowerpoint')">PDF → PPT</button>
+<button onclick="run('powerpointpdf')">PPT → PDF</button>
+
 <button onclick="run('pdfexcel')">PDF → Excel</button>
-<button onclick="run('protect')">حماية PDF</button>
-<button onclick="run('unlock')">فك حماية PDF</button>
+<button onclick="run('exceltopdf')">Excel → PDF</button>
+
+<button onclick="run('pdfjpg')">PDF → JPG</button>
+<button onclick="run('jpgpdf')">JPG → PDF</button>
+
+<button onclick="run('rotate')">تدوير</button>
+<button onclick="run('watermark')">علامة مائية</button>
+
+<button onclick="run('protect')">حماية</button>
+<button onclick="run('unlock')">فك حماية</button>
+
+<button onclick="run('ocr')">OCR</button>
+<button onclick="run('htmlpdf')">HTML → PDF</button>
+
+<button onclick="run('extract')">استخراج صفحات</button>
+<button onclick="run('organize')">ترتيب PDF</button>
+
+</div>
 
 <script>
 async function run(tool){
@@ -65,7 +85,6 @@ async function run(tool){
 
   const formData = new FormData();
 
-  // ✅ اسم الحقل لازم يكون "file"
   for(let i=0;i<input.files.length;i++){
     formData.append("file",input.files[i]);
   }
