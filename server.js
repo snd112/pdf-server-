@@ -90,7 +90,11 @@ app.post("/api/process", async (req, res) => {
 
   } catch (err) {
     console.log("🔥 FULL ERROR:", err.response?.data || err.message);
-    res.status(500).send("❌ حصل خطأ");
+    res.status(500).send(
+  err.response?.data
+    ? JSON.stringify(err.response.data)
+    : err.message
+);
   }
 });
 
