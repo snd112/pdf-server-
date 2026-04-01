@@ -15,6 +15,7 @@ const secretKey = process.env.ILOVEPDF_SECRET_KEY;
 app.post("/api/process", async (req, res) => {
   try {
     const tool = req.body.tool;
+    console.log("🔥 TOOL:", tool);
 
     if (!req.files || !req.files.file) {
       return res.status(400).send("No file uploaded");
@@ -29,41 +30,70 @@ app.post("/api/process", async (req, res) => {
 
     await task.start();
 
-    const uploaded = [];
+    const tempFiles = [];
 
     for (let f of files) {
-      const pathFile = "./temp_" + Date.now() + "_" + f.name;
-      await f.mv(pathFile);
-      await task.addFile(pathFile);
-      uploaded.push(pathFile);
+      const filePath = "./temp_" + Date.now() + "_" + f.name;
+      await f.mv(filePath);
+      await task.addFile(filePath);
+      tempFiles.push(filePath);
     }
 
-    // إعدادات خاصة
+    // ✅ options لكل الأدوات
     let options = {};
 
-    if (tool === "watermark") options = { text: "PDFORGE ULTRA" };
-    if (tool === "rotate") options = { rotation: 90 };
-    if (tool === "protect") options = { password: "1234" };
+    switch (tool) {
+      case "watermark":
+        options = { text: "PDFORGE ULTRA" };
+        break;
+
+      case "rotate":
+        options = { rotation: 90 };
+        break;
+
+      case "protect":
+        options = { password: "1234" };
+        break;
+
+      case "split":
+        options = { split_mode: "range", ranges: "1-2" };
+        break;
+
+      case "ocr":
+        options = { lang: "eng" };
+        break;
+
+      default:
+        options = {};
+    }
 
     await task.process(options);
 
-    const outDir = "./out_" + Date.now();
-    fs.mkdirSync(outDir);
+    // ✅ تنظيف output قبل الاستخدام
+    const outputDir = "./output";
+    if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir);
 
-    await task.download(outDir);
+    fs.readdirSync(outputDir).forEach(f => {
+      fs.unlinkSync(outputDir + "/" + f);
+    });
 
-    const fileOut = fs.readdirSync(outDir)[0];
+    await task.download(outputDir);
 
-    res.download(outDir + "/" + fileOut, () => {
-      uploaded.forEach(f => fs.unlinkSync(f));
-      fs.unlinkSync(outDir + "/" + fileOut);
-      fs.rmdirSync(outDir);
+    const filesOut = fs.readdirSync(outputDir);
+    const outputFile = filesOut[filesOut.length - 1];
+
+    res.download(outputDir + "/" + outputFile, () => {
+      // تنظيف
+      tempFiles.forEach(f => fs.unlinkSync(f));
+      fs.unlinkSync(outputDir + "/" + outputFile);
     });
 
   } catch (err) {
-    console.log("ERROR:", err);
+    console.log("🔥 FULL ERROR:", err.response?.data || err.message);
     res.status(500).send("❌ حصل خطأ");
   }
 });
 
-app.listen(PORT, () => console.log("🔥 Running on " + PORT));
+app.listen(PORT, () => {
+  console.log("🔥 SERVER RUNNING ON " + PORT);
+});
